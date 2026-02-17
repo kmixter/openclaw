@@ -552,7 +552,21 @@ export const chatHandlers: GatewayRequestHandlers = {
     const requested = typeof limit === "number" ? limit : defaultLimit;
     const max = Math.min(hardMax, requested);
     const sliced = rawMessages.length > max ? rawMessages.slice(-max) : rawMessages;
-    const sanitized = stripEnvelopeFromMessages(sliced);
+    // Strip system-prompt content — clients render these as dividers only.
+    const withDividers = sliced.map((msg) => {
+      const m = msg as Record<string, unknown>;
+      const marker = m.__openclaw as Record<string, unknown> | undefined;
+      if (marker?.kind === "system-prompt") {
+        return {
+          role: "system",
+          content: [],
+          timestamp: m.timestamp,
+          __openclaw: { kind: "system-prompt-changed" },
+        };
+      }
+      return msg;
+    });
+    const sanitized = stripEnvelopeFromMessages(withDividers);
     const normalized = sanitizeChatHistoryMessages(sanitized);
     const maxHistoryBytes = getMaxChatHistoryMessagesBytes();
     const perMessageHardCap = Math.min(CHAT_HISTORY_MAX_SINGLE_MESSAGE_BYTES, maxHistoryBytes);

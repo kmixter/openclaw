@@ -67,6 +67,61 @@ function setCachedSessionTitleFields(cacheKey: string, stat: fs.Stats, value: Se
   }
 }
 
+/**
+ * Parse a single JSONL transcript line into a message object, or return null
+ * if the line is empty, malformed, or not a recognized record type.
+ */
+export function parseTranscriptLine(line: string): unknown {
+  if (!line.trim()) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(line);
+    if (parsed?.message) {
+      return parsed.message;
+    }
+
+    // Compaction entries are not "message" records, but they're useful context for debugging.
+    // Emit a lightweight synthetic message that the Web UI can render as a divider.
+    if (parsed?.type === "compaction") {
+      const ts = typeof parsed.timestamp === "string" ? Date.parse(parsed.timestamp) : Number.NaN;
+      const timestamp = Number.isFinite(ts) ? ts : Date.now();
+      return {
+        role: "system",
+        content: [
+          {
+            type: "text",
+            text:
+              typeof parsed.summary === "string" && parsed.summary ? parsed.summary : "Compaction",
+          },
+        ],
+        timestamp,
+        __openclaw: {
+          kind: "compaction",
+          id: typeof parsed.id === "string" ? parsed.id : undefined,
+        },
+      };
+    }
+
+    if (parsed?.type === "custom" && parsed?.customType === "system-prompt") {
+      const data = parsed?.data;
+      const ts = typeof data?.timestamp === "number" ? data.timestamp : Number.NaN;
+      const timestamp = Number.isFinite(ts) ? ts : Date.now();
+      const isDiff = typeof data?.diff === "string";
+      const text = typeof data?.text === "string" ? data.text : isDiff ? data.diff : "";
+      return {
+        role: "system",
+        content: [{ type: "text", text }],
+        timestamp,
+        __openclaw: { kind: "system-prompt", isDiff },
+      };
+    }
+  } catch {
+    // ignore bad lines
+  }
+  return null;
+}
+
 export function readSessionMessages(
   sessionId: string,
   storePath: string | undefined,
@@ -82,33 +137,9 @@ export function readSessionMessages(
   const lines = fs.readFileSync(filePath, "utf-8").split(/\r?\n/);
   const messages: unknown[] = [];
   for (const line of lines) {
-    if (!line.trim()) {
-      continue;
-    }
-    try {
-      const parsed = JSON.parse(line);
-      if (parsed?.message) {
-        messages.push(parsed.message);
-        continue;
-      }
-
-      // Compaction entries are not "message" records, but they're useful context for debugging.
-      // Emit a lightweight synthetic message that the Web UI can render as a divider.
-      if (parsed?.type === "compaction") {
-        const ts = typeof parsed.timestamp === "string" ? Date.parse(parsed.timestamp) : Number.NaN;
-        const timestamp = Number.isFinite(ts) ? ts : Date.now();
-        messages.push({
-          role: "system",
-          content: [{ type: "text", text: "Compaction" }],
-          timestamp,
-          __openclaw: {
-            kind: "compaction",
-            id: typeof parsed.id === "string" ? parsed.id : undefined,
-          },
-        });
-      }
-    } catch {
-      // ignore bad lines
+    const msg = parseTranscriptLine(line);
+    if (msg) {
+      messages.push(msg);
     }
   }
   return messages;

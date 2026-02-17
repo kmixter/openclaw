@@ -38,6 +38,7 @@ type SessionRow = {
   providerOverride?: string;
   modelOverride?: string;
   contextTokens?: number;
+  systemPromptHash?: string;
 };
 
 const KIND_PAD = 6;
@@ -161,6 +162,7 @@ function toRows(store: Record<string, SessionEntry>): SessionRow[] {
         providerOverride: entry?.providerOverride,
         modelOverride: entry?.modelOverride,
         contextTokens: entry?.contextTokens,
+        systemPromptHash: entry?.systemPromptHash,
       } satisfies SessionRow;
     })
     .toSorted((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));

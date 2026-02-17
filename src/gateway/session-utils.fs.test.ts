@@ -499,7 +499,7 @@ describe("readSessionMessages", () => {
       timestamp?: number;
     };
     expect(marker.role).toBe("system");
-    expect(marker.content?.[0]?.text).toBe("Compaction");
+    expect(marker.content?.[0]?.text).toBe("Compacted history");
     expect(marker.__openclaw?.kind).toBe("compaction");
     expect(marker.__openclaw?.id).toBe("comp-1");
     expect(typeof marker.timestamp).toBe("number");

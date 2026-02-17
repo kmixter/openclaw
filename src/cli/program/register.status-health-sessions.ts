@@ -2,6 +2,7 @@ import type { Command } from "commander";
 import { healthCommand } from "../../commands/health.js";
 import { sessionsCommand } from "../../commands/sessions.js";
 import { statusCommand } from "../../commands/status.js";
+import { transcriptCommand } from "../../commands/transcript.js";
 import { setVerbose } from "../../globals.js";
 import { defaultRuntime } from "../../runtime.js";
 import { formatDocsLink } from "../../terminal/links.js";
@@ -145,5 +146,41 @@ export function registerStatusHealthSessionsCommands(program: Command) {
         },
         defaultRuntime,
       );
+    });
+
+  program
+    .command("transcript")
+    .description("Print the full transcript of a session")
+    .argument("[session-key]", "Session key (default: agent:main:main)")
+    .option("--store <path>", "Path to session store (default: resolved from config)")
+    .option("--limit <n>", "Show only the last N messages")
+    .option("--thinking", "Show thinking blocks", false)
+    .option("--system", "Show the system instruction", false)
+    .option("--follow", "Keep watching for new messages (like tail -f)", false)
+    .addHelpText(
+      "after",
+      () =>
+        `\n${theme.heading("Examples:")}\n${formatHelpExamples([
+          ["openclaw transcript", "Print transcript for agent:main:main."],
+          ["openclaw transcript alice", "Print transcript for session 'alice'."],
+          ["openclaw transcript --limit 10", "Show only the last 10 messages."],
+          ["openclaw transcript alice --thinking", "Include thinking blocks."],
+          ["openclaw transcript --follow", "Stream new messages as they arrive."],
+        ])}`,
+    )
+    .action(async (sessionKey: string | undefined, opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await transcriptCommand(
+          sessionKey ?? "agent:main:main",
+          {
+            store: opts.store as string | undefined,
+            limit: parsePositiveIntOrUndefined(opts.limit),
+            thinking: Boolean(opts.thinking),
+            system: Boolean(opts.system),
+            follow: Boolean(opts.follow),
+          },
+          defaultRuntime,
+        );
+      });
     });
 }

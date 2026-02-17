@@ -101,4 +101,6 @@ export type RunEmbeddedPiAgentParams = {
   streamParams?: AgentStreamParams;
   ownerNumbers?: string[];
   enforceFinalTag?: boolean;
+  /** Previous system prompt hash from the session store (for change detection). */
+  systemPromptHash?: string;
 };

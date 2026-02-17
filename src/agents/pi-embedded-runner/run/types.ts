@@ -21,6 +21,8 @@ export type EmbeddedRunAttemptParams = EmbeddedRunAttemptBase & {
   modelRegistry: ModelRegistry;
   thinkLevel: ThinkLevel;
   legacyBeforeAgentStartResult?: PluginHookBeforeAgentStartResult;
+  /** Previous system prompt hash from the session store (for change detection). */
+  systemPromptHash?: string;
 };
 
 export type EmbeddedRunAttemptResult = {
@@ -52,4 +54,6 @@ export type EmbeddedRunAttemptResult = {
   compactionCount?: number;
   /** Client tool call detected (OpenResponses hosted tools). */
   clientToolCall?: { name: string; params: Record<string, unknown> };
+  /** SHA-256 hash of the system prompt text, for change detection. */
+  systemPromptHash?: string;
 };

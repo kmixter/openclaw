@@ -555,6 +555,15 @@ function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup> {
       });
       continue;
     }
+    if (marker && marker.kind === "system-prompt-changed") {
+      items.push({
+        kind: "divider",
+        key: `divider:sysprompt:${normalized.timestamp}:${i}`,
+        label: "System prompt changed",
+        timestamp: normalized.timestamp ?? Date.now(),
+      });
+      continue;
+    }
 
     if (!props.showThinking && normalized.role.toLowerCase() === "toolresult") {
       continue;

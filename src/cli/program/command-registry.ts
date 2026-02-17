@@ -183,6 +183,11 @@ const coreEntries: CoreCliEntry[] = [
         description: "List stored conversation sessions",
         hasSubcommands: false,
       },
+      {
+        name: "transcript",
+        description: "Print the full transcript of a session",
+        hasSubcommands: false,
+      },
     ],
     register: async ({ program }) => {
       const mod = await import("./register.status-health-sessions.js");

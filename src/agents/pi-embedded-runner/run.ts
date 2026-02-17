@@ -712,6 +712,7 @@ export async function runEmbeddedPiAgent(
             streamParams: params.streamParams,
             ownerNumbers: params.ownerNumbers,
             enforceFinalTag: params.enforceFinalTag,
+            systemPromptHash: params.systemPromptHash,
           });
 
           const {
@@ -946,6 +947,7 @@ export async function runEmbeddedPiAgent(
                   model: model.id,
                 },
                 systemPromptReport: attempt.systemPromptReport,
+                systemPromptHash: attempt.systemPromptHash,
                 error: { kind, message: errorText },
               },
             };
@@ -972,6 +974,7 @@ export async function runEmbeddedPiAgent(
                     model: model.id,
                   },
                   systemPromptReport: attempt.systemPromptReport,
+                  systemPromptHash: attempt.systemPromptHash,
                   error: { kind: "role_ordering", message: errorText },
                 },
               };
@@ -1000,6 +1003,7 @@ export async function runEmbeddedPiAgent(
                     model: model.id,
                   },
                   systemPromptReport: attempt.systemPromptReport,
+                  systemPromptHash: attempt.systemPromptHash,
                   error: { kind: "image_size", message: errorText },
                 },
               };
@@ -1309,6 +1313,7 @@ export async function runEmbeddedPiAgent(
               agentMeta,
               aborted,
               systemPromptReport: attempt.systemPromptReport,
+              systemPromptHash: attempt.systemPromptHash,
               // Handle client tool calls (OpenResponses hosted tools)
               stopReason: attempt.clientToolCall ? "tool_calls" : undefined,
               pendingToolCalls: attempt.clientToolCall

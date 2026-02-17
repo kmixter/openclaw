@@ -48,6 +48,7 @@ export async function persistSessionUsageUpdate(params: {
   contextTokensUsed?: number;
   promptTokens?: number;
   systemPromptReport?: SessionSystemPromptReport;
+  systemPromptHash?: string;
   cliSessionId?: string;
   logLabel?: string;
 }): Promise<void> {
@@ -88,6 +89,7 @@ export async function persistSessionUsageUpdate(params: {
             model: params.modelUsed ?? entry.model,
             contextTokens: resolvedContextTokens,
             systemPromptReport: params.systemPromptReport ?? entry.systemPromptReport,
+            systemPromptHash: params.systemPromptHash ?? entry.systemPromptHash,
             updatedAt: Date.now(),
           };
           if (hasUsage) {
@@ -120,6 +122,7 @@ export async function persistSessionUsageUpdate(params: {
             model: params.modelUsed ?? entry.model,
             contextTokens: params.contextTokensUsed ?? entry.contextTokens,
             systemPromptReport: params.systemPromptReport ?? entry.systemPromptReport,
+            systemPromptHash: params.systemPromptHash ?? entry.systemPromptHash,
             updatedAt: Date.now(),
           };
           return applyCliSessionIdToSessionPatch(params, entry, patch);

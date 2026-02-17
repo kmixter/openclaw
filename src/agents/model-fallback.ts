@@ -301,6 +301,8 @@ export async function runWithModelFallback<T>(params: {
   fallbacksOverride?: string[];
   run: (provider: string, model: string) => Promise<T>;
   onError?: ModelFallbackErrorHandler;
+  /** Called when the system switches to a fallback model so the user can be notified. */
+  onFallbackSwitch?: (message: string) => void | Promise<void>;
 }): Promise<ModelFallbackRunResult<T>> {
   const candidates = resolveFallbackCandidates({
     cfg: params.cfg,
@@ -349,6 +351,13 @@ export async function runWithModelFallback<T>(params: {
             error: `Provider ${candidate.provider} is in cooldown (all profiles unavailable)`,
             reason: "rate_limit",
           });
+          // Notify the user about the cooldown skip if there's a next candidate
+          const next = candidates[i + 1];
+          if (next && params.onFallbackSwitch) {
+            await params.onFallbackSwitch(
+              `⚠️ ${candidate.provider}/${candidate.model} in cooldown (rate_limit). Trying ${next.provider}/${next.model}...`,
+            );
+          }
           continue;
         }
         // Primary model probe: attempt it despite cooldown to detect recovery.
@@ -403,6 +412,15 @@ export async function runWithModelFallback<T>(params: {
         attempt: i + 1,
         total: candidates.length,
       });
+
+      // Notify the user about the failover if there's a next candidate to try
+      const next = candidates[i + 1];
+      if (next && params.onFallbackSwitch) {
+        const reason = described.reason ?? "error";
+        await params.onFallbackSwitch(
+          `⚠️ ${candidate.provider}/${candidate.model} unavailable (${reason}). Trying ${next.provider}/${next.model}...`,
+        );
+      }
     }
   }
 

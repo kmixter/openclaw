@@ -30,6 +30,8 @@ export type EmbeddedRunAttemptParams = EmbeddedRunAttemptBase & {
   modelRegistry: ModelRegistry;
   thinkLevel: ThinkLevel;
   legacyBeforeAgentStartResult?: PluginHookBeforeAgentStartResult;
+  /** Previous system prompt hash from the session store (for change detection). */
+  systemPromptHash?: string;
 };
 
 export type EmbeddedRunAttemptResult = {
@@ -66,4 +68,6 @@ export type EmbeddedRunAttemptResult = {
   clientToolCall?: { name: string; params: Record<string, unknown> };
   /** True when sessions_yield tool was called during this attempt. */
   yieldDetected?: boolean;
+  /** SHA-256 hash of the system prompt text, for change detection. */
+  systemPromptHash?: string;
 };

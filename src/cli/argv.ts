@@ -305,7 +305,12 @@ export function shouldMigrateStateFromPath(path: string[]): boolean {
     return true;
   }
   const [primary, secondary] = path;
-  if (primary === "health" || primary === "status" || primary === "sessions") {
+  if (
+    primary === "health" ||
+    primary === "status" ||
+    primary === "sessions" ||
+    primary === "transcript"
+  ) {
     return false;
   }
   if (primary === "config" && (secondary === "get" || secondary === "unset")) {

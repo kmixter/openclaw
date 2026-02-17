@@ -475,6 +475,7 @@ export async function runReplyAgent(params: {
       providerUsed,
       contextTokensUsed,
       systemPromptReport: runResult.meta?.systemPromptReport,
+      systemPromptHash: runResult.meta?.systemPromptHash,
       cliSessionId,
     });
 

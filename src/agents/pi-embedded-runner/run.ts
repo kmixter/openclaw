@@ -988,6 +988,7 @@ export async function runEmbeddedPiAgent(
             bootstrapPromptWarningSignaturesSeen,
             bootstrapPromptWarningSignature:
               bootstrapPromptWarningSignaturesSeen[bootstrapPromptWarningSignaturesSeen.length - 1],
+            systemPromptHash: params.systemPromptHash,
           });
 
           const {
@@ -1353,6 +1354,7 @@ export async function runEmbeddedPiAgent(
                   lastTurnTotal,
                 }),
                 systemPromptReport: attempt.systemPromptReport,
+                systemPromptHash: attempt.systemPromptHash,
                 error: { kind, message: errorText },
               },
             };
@@ -1387,6 +1389,7 @@ export async function runEmbeddedPiAgent(
                     lastTurnTotal,
                   }),
                   systemPromptReport: attempt.systemPromptReport,
+                  systemPromptHash: attempt.systemPromptHash,
                   error: { kind: "role_ordering", message: errorText },
                 },
               };
@@ -1419,6 +1422,7 @@ export async function runEmbeddedPiAgent(
                     lastTurnTotal,
                   }),
                   systemPromptReport: attempt.systemPromptReport,
+                  systemPromptHash: attempt.systemPromptHash,
                   error: { kind: "image_size", message: errorText },
                 },
               };
@@ -1785,6 +1789,7 @@ export async function runEmbeddedPiAgent(
               agentMeta,
               aborted,
               systemPromptReport: attempt.systemPromptReport,
+              systemPromptHash: attempt.systemPromptHash,
               // Handle client tool calls (OpenResponses hosted tools)
               // Propagate the LLM stop reason so callers (lifecycle events,
               // ACP bridge) can distinguish end_turn from max_tokens.

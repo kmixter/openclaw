@@ -125,4 +125,6 @@ export type RunEmbeddedPiAgentParams = {
    * where transient service pressure is often model-scoped.
    */
   allowTransientCooldownProbe?: boolean;
+  /** Previous system prompt hash from the session store (for change detection). */
+  systemPromptHash?: string;
 };

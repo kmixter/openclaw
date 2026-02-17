@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import type { AgentMessage, StreamFn } from "@mariozechner/pi-agent-core";
@@ -7,6 +8,7 @@ import {
   DefaultResourceLoader,
   SessionManager,
 } from "@mariozechner/pi-coding-agent";
+import { createPatch } from "diff";
 import { resolveHeartbeatPrompt } from "../../../auto-reply/heartbeat.js";
 import { resolveChannelCapabilities } from "../../../config/channel-capabilities.js";
 import type { OpenClawConfig } from "../../../config/config.js";
@@ -135,6 +137,9 @@ import {
 import { pruneProcessedHistoryImages } from "./history-image-prune.js";
 import { detectAndLoadPromptImages } from "./images.js";
 import type { EmbeddedRunAttemptParams, EmbeddedRunAttemptResult } from "./types.js";
+
+/** Cache last system prompt per session so we can store compact diffs. */
+const lastSystemPromptBySession = new Map<string, string>();
 
 type PromptBuildHookRunner = {
   hasHooks: (hookName: "before_prompt_build" | "before_agent_start") => boolean;
@@ -1757,6 +1762,25 @@ export async function runEmbeddedAttempt(
         cwd: effectiveWorkspace,
       });
 
+      // Persist system prompt to JSONL when it changes.
+      const promptHash = crypto.createHash("sha256").update(appendPrompt).digest("hex");
+      if (promptHash \!== params.systemPromptHash) {
+        try {
+          const previousText = lastSystemPromptBySession.get(params.sessionId);
+          const diffText = previousText
+            ? createPatch("system-prompt", previousText, appendPrompt, "", "", { context: 1 })
+            : null;
+          sessionManager.appendCustomEntry("system-prompt", {
+            timestamp: Date.now(),
+            hash: promptHash,
+            ...(diffText ? { diff: diffText } : { text: appendPrompt }),
+          });
+        } catch {
+          // ignore persistence failures
+        }
+      }
+      lastSystemPromptBySession.set(params.sessionId, appendPrompt);
+
       const settingsManager = createPreparedEmbeddedPiSettingsManager({
         cwd: effectiveWorkspace,
         agentDir,
@@ -2768,6 +2792,7 @@ export async function runEmbeddedAttempt(
         bootstrapPromptWarningSignaturesSeen: bootstrapPromptWarning.warningSignaturesSeen,
         bootstrapPromptWarningSignature: bootstrapPromptWarning.signature,
         systemPromptReport,
+        systemPromptHash: promptHash,
         messagesSnapshot,
         assistantTexts,
         toolMetas: toolMetasNormalized,

@@ -187,6 +187,74 @@ function resolveActiveErrorContext(params: {
   };
 }
 
+/** Parse "52s" → 52000, "1.5s" → 1500 */
+const RETRY_DELAY_RE = /^([\d.]+)s$/;
+
+/** Match "retry in 51.4s" or "Please retry in 51.427806843s." in error messages */
+const RETRY_IN_MESSAGE_RE = /(?:retry|try again) in ([\d.]+)s/i;
+
+function extractRetryAfterMs(err: unknown): number | undefined {
+  if (!err || typeof err !== "object") {
+    return undefined;
+  }
+  // 1. Standard retry-after HTTP header (Anthropic, OpenAI, etc.)
+  const headers = (err as { headers?: { get?: (name: string) => string | null } }).headers;
+  if (headers && typeof headers.get === "function") {
+    const raw = headers.get("retry-after");
+    if (raw) {
+      const seconds = Number(raw);
+      if (Number.isFinite(seconds) && seconds > 0) {
+        return seconds * 1000;
+      }
+    }
+  }
+  // 2. Google/Gemini: error.details[] → RetryInfo.retryDelay ("52s")
+  const rec = err as Record<string, unknown>;
+  const errInner = rec.error as Record<string, unknown> | undefined;
+  const details = Array.isArray(rec.details)
+    ? rec.details
+    : Array.isArray(errInner?.details)
+      ? errInner.details
+      : undefined;
+  if (Array.isArray(details)) {
+    for (const detail of details) {
+      if (!detail || typeof detail !== "object") {
+        continue;
+      }
+      const item = detail as { "@type"?: string; retryDelay?: string };
+      if (item["@type"]?.endsWith("/google.rpc.RetryInfo") && typeof item.retryDelay === "string") {
+        const match = RETRY_DELAY_RE.exec(item.retryDelay);
+        if (match) {
+          const seconds = Number(match[1]);
+          if (Number.isFinite(seconds) && seconds > 0) {
+            return seconds * 1000;
+          }
+        }
+      }
+    }
+  }
+  // 3. Fallback: parse "retry in Xs" from the error message text.
+  // The Google SDK wraps structured errors as plain Error objects, losing
+  // the RetryInfo details but preserving the delay in the message string.
+  const message = (err as { message?: string }).message;
+  if (typeof message === "string") {
+    const msgMatch = RETRY_IN_MESSAGE_RE.exec(message);
+    if (msgMatch) {
+      const seconds = Number(msgMatch[1]);
+      if (Number.isFinite(seconds) && seconds > 0) {
+        return seconds * 1000;
+      }
+    }
+  }
+
+  // 4. Recursive check for Error cause (Node 16.9+)
+  if (rec.cause) {
+    return extractRetryAfterMs(rec.cause);
+  }
+
+  return undefined;
+}
+
 export async function runEmbeddedPiAgent(
   params: RunEmbeddedPiAgentParams,
 ): Promise<EmbeddedPiRunResult> {
@@ -886,6 +954,41 @@ export async function runEmbeddedPiAgent(
               };
             }
             const promptFailoverReason = classifyFailoverReason(errorText);
+            // If retryRateLimit is enabled and the provider told us how long to wait,
+            // just sleep and retry the same API key — don't mark it as failed at all.
+            if (
+              !aborted &&
+              promptFailoverReason === "rate_limit" &&
+              params.config?.agents?.defaults?.retryRateLimit
+            ) {
+              const retryMs = extractRetryAfterMs(promptError);
+              if (retryMs != null && retryMs > 0) {
+                const delaySec = Math.ceil(retryMs / 1000);
+                log.warn(
+                  `Rate limited with retry-after=${delaySec}s on ${provider}/${modelId} (profile=${lastProfileId ?? "?"}). Sleeping...`,
+                );
+                if (params.onBlockReply) {
+                  await params.onBlockReply({
+                    text: `⏳ Rate limited. Retrying in ${delaySec}s...`,
+                  });
+                }
+                await new Promise<void>((resolve) => {
+                  const timer = setTimeout(resolve, retryMs + 2_000);
+                  params.abortSignal?.addEventListener(
+                    "abort",
+                    () => {
+                      clearTimeout(timer);
+                      resolve();
+                    },
+                    { once: true },
+                  );
+                });
+                if (params.abortSignal?.aborted) {
+                  continue;
+                }
+                continue;
+              }
+            }
             await maybeMarkAuthProfileFailure({
               profileId: lastProfileId,
               reason: promptFailoverReason,
@@ -972,6 +1075,42 @@ export async function runEmbeddedPiAgent(
                 timedOut || assistantFailoverReason === "timeout"
                   ? "timeout"
                   : (assistantFailoverReason ?? "unknown");
+              if (reason === "rate_limit") {
+                log.warn(
+                  `Profile ${lastProfileId} rate limited during response: ${lastAssistant?.errorMessage ?? "(no message)"}`,
+                );
+                if (params.config?.agents?.defaults?.retryRateLimit) {
+                  const retryMs = extractRetryAfterMs({
+                    message: lastAssistant?.errorMessage,
+                  });
+                  if (retryMs != null && retryMs > 0) {
+                    const delaySec = Math.ceil(retryMs / 1000);
+                    log.warn(
+                      `Mid-stream rate limit with retry-after=${delaySec}s on ${provider}/${modelId} (profile=${lastProfileId ?? "?"}). Sleeping...`,
+                    );
+                    if (params.onBlockReply) {
+                      await params.onBlockReply({
+                        text: `⏳ Rate limited mid-stream. Retrying in ${delaySec}s...`,
+                      });
+                    }
+                    await new Promise<void>((resolve) => {
+                      const timer = setTimeout(resolve, retryMs + 2_000);
+                      params.abortSignal?.addEventListener(
+                        "abort",
+                        () => {
+                          clearTimeout(timer);
+                          resolve();
+                        },
+                        { once: true },
+                      );
+                    });
+                    if (params.abortSignal?.aborted) {
+                      continue;
+                    }
+                    continue;
+                  }
+                }
+              }
               // Skip cooldown for timeouts: a timeout is model/network-specific,
               // not an auth issue. Marking the profile would poison fallback models
               // on the same provider (e.g. gpt-5.3 timeout blocks gpt-5.2).
@@ -1144,3 +1283,5 @@ export async function runEmbeddedPiAgent(
     }),
   );
 }
+
+export const __testing = { extractRetryAfterMs } as const;

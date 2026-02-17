@@ -186,6 +186,7 @@ type ResolvedAuthCooldownConfig = {
   billingBackoffMs: number;
   billingMaxMs: number;
   failureWindowMs: number;
+  retryRateLimit: boolean;
 };
 
 function resolveAuthCooldownConfig(params: {
@@ -229,6 +230,7 @@ function resolveAuthCooldownConfig(params: {
     billingBackoffMs: billingBackoffHours * 60 * 60 * 1000,
     billingMaxMs: billingMaxHours * 60 * 60 * 1000,
     failureWindowMs: failureWindowHours * 60 * 60 * 1000,
+    retryRateLimit: params.cfg?.agents?.defaults?.retryRateLimit === true,
   };
 }
 
@@ -306,6 +308,10 @@ function computeNextProfileUsageStats(params: {
       recomputedUntil: params.now + backoffMs,
     });
     updatedStats.disabledReason = "billing";
+  } else if (params.reason === "rate_limit" && params.cfgResolved.retryRateLimit) {
+    // When retryRateLimit is enabled, use a fixed 60s cooldown instead of
+    // exponential backoff so the key doesn't get locked out for hours.
+    updatedStats.cooldownUntil = params.now + 60_000;
   } else {
     const backoffMs = calculateAuthProfileCooldownMs(nextErrorCount);
     // Keep active cooldown windows immutable so retries within the window

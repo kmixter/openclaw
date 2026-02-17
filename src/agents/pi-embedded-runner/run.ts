@@ -585,6 +585,37 @@ export async function runEmbeddedPiAgent(
           agentDir,
         });
       };
+
+      const runCompaction = (overflowOpts?: {
+        trigger?: "manual" | "overflow";
+        diagId?: string;
+        attempt?: number;
+        maxAttempts?: number;
+      }) =>
+        compactEmbeddedPiSessionDirect({
+          sessionId: params.sessionId,
+          sessionKey: params.sessionKey,
+          messageChannel: params.messageChannel,
+          messageProvider: params.messageProvider,
+          agentAccountId: params.agentAccountId,
+          authProfileId: lastProfileId,
+          sessionFile: params.sessionFile,
+          workspaceDir: resolvedWorkspace,
+          agentDir,
+          config: params.config,
+          skillsSnapshot: params.skillsSnapshot,
+          senderIsOwner: params.senderIsOwner,
+          provider,
+          model: modelId,
+          runId: params.runId,
+          thinkLevel,
+          reasoningLevel: params.reasoningLevel,
+          bashElevated: params.bashElevated,
+          extraSystemPrompt: params.extraSystemPrompt,
+          ownerNumbers: params.ownerNumbers,
+          ...overflowOpts,
+        });
+
       try {
         while (true) {
           if (runLoopIterations >= MAX_RUN_LOOP_ITERATIONS) {
@@ -705,6 +736,46 @@ export async function runEmbeddedPiAgent(
             provider,
             model: modelId,
           });
+
+          // Proactive compaction: if prompt tokens exceed the contextTokens cap
+          // but the API didn't error (model natively supports more), compact now
+          // so the next turn starts under the cap.
+          if (
+            !aborted &&
+            !promptError &&
+            !timedOut &&
+            overflowCompactionAttempts < MAX_OVERFLOW_COMPACTION_ATTEMPTS
+          ) {
+            const currentPromptTokens = derivePromptTokens(lastRunPromptUsage);
+            if (currentPromptTokens != null && currentPromptTokens > ctxInfo.tokens) {
+              overflowCompactionAttempts++;
+              log.warn(
+                `proactive compaction: prompt tokens (${currentPromptTokens}) exceed cap (${ctxInfo.tokens}) for ${provider}/${modelId}; compacting session`,
+              );
+              const compactResult = await runCompaction();
+              if (compactResult.compacted) {
+                autoCompactionCount += 1;
+                log.info(`proactive compaction succeeded for ${provider}/${modelId}`);
+                const tokensAfter = compactResult.result?.tokensAfter;
+                if (
+                  typeof tokensAfter === "number" &&
+                  Number.isFinite(tokensAfter) &&
+                  tokensAfter > 0
+                ) {
+                  // Keep session token accounting aligned with the post-compaction context size.
+                  lastRunPromptUsage = {
+                    input: tokensAfter,
+                    total: tokensAfter,
+                  };
+                }
+              } else {
+                log.warn(
+                  `proactive compaction failed for ${provider}/${modelId}: ${compactResult.reason ?? "nothing to compact"}`,
+                );
+              }
+            }
+          }
+
           const formattedAssistantErrorText = lastAssistant
             ? formatAssistantErrorText(lastAssistant, {
                 cfg: params.config,
@@ -780,27 +851,7 @@ export async function runEmbeddedPiAgent(
               log.warn(
                 `context overflow detected (attempt ${overflowCompactionAttempts}/${MAX_OVERFLOW_COMPACTION_ATTEMPTS}); attempting auto-compaction for ${provider}/${modelId}`,
               );
-              const compactResult = await compactEmbeddedPiSessionDirect({
-                sessionId: params.sessionId,
-                sessionKey: params.sessionKey,
-                messageChannel: params.messageChannel,
-                messageProvider: params.messageProvider,
-                agentAccountId: params.agentAccountId,
-                authProfileId: lastProfileId,
-                sessionFile: params.sessionFile,
-                workspaceDir: resolvedWorkspace,
-                agentDir,
-                config: params.config,
-                skillsSnapshot: params.skillsSnapshot,
-                senderIsOwner: params.senderIsOwner,
-                provider,
-                model: modelId,
-                runId: params.runId,
-                thinkLevel,
-                reasoningLevel: params.reasoningLevel,
-                bashElevated: params.bashElevated,
-                extraSystemPrompt: params.extraSystemPrompt,
-                ownerNumbers: params.ownerNumbers,
+              const compactResult = await runCompaction({
                 trigger: "overflow",
                 diagId: overflowDiagId,
                 attempt: overflowCompactionAttempts,

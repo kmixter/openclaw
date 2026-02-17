@@ -335,4 +335,34 @@ describe("overflow compaction in run loop", () => {
     expect(result.meta.agentMeta?.usage?.input).toBe(4_000);
     expect(result.meta.agentMeta?.promptTokens).toBe(2_000);
   });
+
+  it("uses post-compaction tokensAfter for promptTokens after proactive compaction succeeds", async () => {
+    mockedRunEmbeddedAttempt.mockResolvedValue(
+      makeAttemptResult({
+        lastAssistant: {
+          stopReason: "end_turn",
+          usage: {
+            input: 220_000,
+            total: 220_000,
+          },
+        } as unknown as EmbeddedRunAttemptResult["lastAssistant"],
+      }),
+    );
+
+    mockedCompactDirect.mockResolvedValueOnce({
+      ok: true,
+      compacted: true,
+      result: {
+        summary: "Compacted session",
+        firstKeptEntryId: "entry-7",
+        tokensBefore: 220_000,
+        tokensAfter: 90_000,
+      },
+    });
+
+    const result = await runEmbeddedPiAgent(baseParams);
+
+    expect(mockedCompactDirect).toHaveBeenCalledTimes(1);
+    expect(result.meta.agentMeta?.promptTokens).toBe(90_000);
+  });
 });

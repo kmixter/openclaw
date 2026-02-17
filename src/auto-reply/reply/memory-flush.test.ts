@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { OpenClawConfig } from "../../config/config.js";
 import {
   DEFAULT_MEMORY_FLUSH_PROMPT,
+  resolveMemoryFlushContextWindowTokens,
   resolveMemoryFlushPromptForRun,
   resolveMemoryFlushRelativePathForRun,
 } from "./memory-flush.js";
@@ -60,5 +61,42 @@ describe("DEFAULT_MEMORY_FLUSH_PROMPT", () => {
     // Agents must not create YYYY-MM-DD-HHMM.md variants alongside the canonical file
     expect(DEFAULT_MEMORY_FLUSH_PROMPT).toContain("timestamped variant");
     expect(DEFAULT_MEMORY_FLUSH_PROMPT).toContain("YYYY-MM-DD.md");
+  });
+});
+
+describe("resolveMemoryFlushContextWindowTokens", () => {
+  it("uses config cap when model lookup returns undefined", () => {
+    expect(
+      resolveMemoryFlushContextWindowTokens({
+        modelId: undefined,
+        agentCfgContextTokens: 300_000,
+      }),
+    ).toBe(300_000);
+  });
+
+  it("uses config cap when it is smaller than native model window", async () => {
+    const memoryFlush = await import("./memory-flush.js");
+    const contextModule = await import("../../agents/context.js");
+    const spy = vi.spyOn(contextModule, "lookupContextTokens").mockReturnValue(1_000_000);
+
+    const result = memoryFlush.resolveMemoryFlushContextWindowTokens({
+      modelId: "google/gemini-3-flash-preview",
+      agentCfgContextTokens: 300_000,
+    });
+    expect(result).toBe(300_000);
+    spy.mockRestore();
+  });
+
+  it("uses native model window when config cap is larger", async () => {
+    const contextModule = await import("../../agents/context.js");
+    const spy = vi.spyOn(contextModule, "lookupContextTokens").mockReturnValue(200_000);
+
+    const memoryFlush = await import("./memory-flush.js");
+    const result = memoryFlush.resolveMemoryFlushContextWindowTokens({
+      modelId: "anthropic/claude-haiku-4-5",
+      agentCfgContextTokens: 500_000,
+    });
+    expect(result).toBe(200_000);
+    spy.mockRestore();
   });
 });

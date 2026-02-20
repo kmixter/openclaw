@@ -112,6 +112,7 @@ export type ResolvedTtsConfig = {
   };
   openai: {
     apiKey?: string;
+    baseUrl?: string;
     model: string;
     voice: string;
   };
@@ -287,6 +288,7 @@ export function resolveTtsConfig(cfg: OpenClawConfig): ResolvedTtsConfig {
     },
     openai: {
       apiKey: raw.openai?.apiKey,
+      baseUrl: raw.openai?.baseUrl?.trim() || undefined,
       model: raw.openai?.model ?? DEFAULT_OPENAI_MODEL,
       voice: raw.openai?.voice ?? DEFAULT_OPENAI_VOICE,
     },
@@ -503,7 +505,11 @@ export function resolveTtsApiKey(
     return config.elevenlabs.apiKey || process.env.ELEVENLABS_API_KEY || process.env.XI_API_KEY;
   }
   if (provider === "openai") {
-    return config.openai.apiKey || process.env.OPENAI_API_KEY;
+    return (
+      config.openai.apiKey ||
+      process.env.OPENAI_API_KEY ||
+      (config.openai.baseUrl ? "not-needed" : undefined)
+    );
   }
   return undefined;
 }
@@ -668,6 +674,7 @@ export async function textToSpeech(params: {
           voice: openaiVoiceOverride ?? config.openai.voice,
           responseFormat: output.openai,
           timeoutMs: config.timeoutMs,
+          baseUrl: config.openai.baseUrl,
         });
       }
 
@@ -767,6 +774,7 @@ export async function textToSpeechTelephony(params: {
         voice: config.openai.voice,
         responseFormat: output.format,
         timeoutMs: config.timeoutMs,
+        baseUrl: config.openai.baseUrl,
       });
 
       return {

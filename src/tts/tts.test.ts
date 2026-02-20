@@ -129,6 +129,26 @@ describe("tts", () => {
       expect(isValidOpenAIVoice("alloy ")).toBe(false);
       expect(isValidOpenAIVoice(" alloy")).toBe(false);
     });
+
+    it("accepts any voice when config baseUrl points to a custom endpoint", () => {
+      expect(isValidOpenAIVoice("af_sky", "http://localhost:8880/v1")).toBe(true);
+      expect(isValidOpenAIVoice("af_heart", "http://localhost:8880/v1")).toBe(true);
+      expect(isValidOpenAIVoice("custom_voice", "http://my-tts-server/v1")).toBe(true);
+    });
+
+    it("accepts any voice when env var points to a custom endpoint", () => {
+      withEnv({ OPENAI_TTS_BASE_URL: "http://localhost:8880/v1" }, () => {
+        expect(isValidOpenAIVoice("af_sky")).toBe(true);
+        expect(isValidOpenAIVoice("anything")).toBe(true);
+      });
+    });
+
+    it("config baseUrl takes priority over env var for validation", () => {
+      withEnv({ OPENAI_TTS_BASE_URL: undefined }, () => {
+        // No env var, but config baseUrl is custom → should accept any voice
+        expect(isValidOpenAIVoice("af_sky", "http://localhost:8880/v1")).toBe(true);
+      });
+    });
   });
 
   describe("isValidOpenAIModel", () => {
@@ -150,6 +170,68 @@ describe("tts", () => {
       for (const testCase of cases) {
         expect(isValidOpenAIModel(testCase.model), testCase.model).toBe(testCase.expected);
       }
+    });
+
+    it("accepts any model when config baseUrl points to a custom endpoint", () => {
+      expect(isValidOpenAIModel("kokoro", "http://localhost:8880/v1")).toBe(true);
+      expect(isValidOpenAIModel("my-custom-model", "http://my-tts-server/v1")).toBe(true);
+    });
+
+    it("accepts any model when env var points to a custom endpoint", () => {
+      withEnv({ OPENAI_TTS_BASE_URL: "http://localhost:8880/v1" }, () => {
+        expect(isValidOpenAIModel("kokoro")).toBe(true);
+      });
+    });
+  });
+
+  describe("resolveTtsConfig baseUrl", () => {
+    const baseCfg: OpenClawConfig = {
+      agents: { defaults: { model: { primary: "openai/gpt-4o-mini" } } },
+      messages: { tts: {} },
+    };
+
+    it("resolves baseUrl from config", () => {
+      const cfg: OpenClawConfig = {
+        ...baseCfg,
+        messages: {
+          tts: {
+            openai: { baseUrl: "http://localhost:8880/v1" },
+          },
+        },
+      };
+      const config = resolveTtsConfig(cfg);
+      expect(config.openai.baseUrl).toBe("http://localhost:8880/v1");
+    });
+
+    it("trims whitespace from baseUrl", () => {
+      const cfg: OpenClawConfig = {
+        ...baseCfg,
+        messages: {
+          tts: {
+            openai: { baseUrl: "  http://localhost:8880/v1  " },
+          },
+        },
+      };
+      const config = resolveTtsConfig(cfg);
+      expect(config.openai.baseUrl).toBe("http://localhost:8880/v1");
+    });
+
+    it("resolves empty baseUrl to undefined", () => {
+      const cfg: OpenClawConfig = {
+        ...baseCfg,
+        messages: {
+          tts: {
+            openai: { baseUrl: "  " },
+          },
+        },
+      };
+      const config = resolveTtsConfig(cfg);
+      expect(config.openai.baseUrl).toBeUndefined();
+    });
+
+    it("resolves undefined baseUrl when not configured", () => {
+      const config = resolveTtsConfig(baseCfg);
+      expect(config.openai.baseUrl).toBeUndefined();
     });
   });
 
@@ -526,6 +608,117 @@ describe("tts", () => {
         expect(result.mediaUrl).toBeDefined();
         expect(fetchMock).toHaveBeenCalledTimes(1);
       });
+    });
+
+    it("strips TTS directive tags from visible text even when auto mode is off", async () => {
+      const prevPrefs = process.env.OPENCLAW_TTS_PREFS;
+      process.env.OPENCLAW_TTS_PREFS = `/tmp/tts-test-${Date.now()}.json`;
+
+      const cfg = {
+        ...baseCfg,
+        messages: {
+          ...baseCfg.messages!,
+          tts: { ...baseCfg.messages!.tts, auto: "off" as const },
+        },
+      };
+
+      const payload = {
+        text: "Hello [[tts:stability=0.4 style=0.7]] world",
+      };
+      const result = await maybeApplyTtsToPayload({
+        payload,
+        cfg,
+        kind: "final",
+      });
+
+      expect(result.text).not.toContain("[[tts:");
+      expect(result.text).toBe("Hello  world");
+
+      process.env.OPENCLAW_TTS_PREFS = prevPrefs;
+    });
+
+    it("uses config baseUrl for OpenAI TTS fetch endpoint", async () => {
+      const customCfg: OpenClawConfig = {
+        agents: { defaults: { model: { primary: "openai/gpt-4o-mini" } } },
+        messages: {
+          tts: {
+            auto: "inbound",
+            provider: "openai",
+            openai: {
+              apiKey: "test-key",
+              baseUrl: "http://localhost:8880/v1",
+              model: "kokoro",
+              voice: "af_sky",
+            },
+          },
+        },
+      };
+
+      const prevPrefs = process.env.OPENCLAW_TTS_PREFS;
+      process.env.OPENCLAW_TTS_PREFS = `/tmp/tts-test-${Date.now()}.json`;
+      const originalFetch = globalThis.fetch;
+      let capturedUrl: string | undefined;
+      const fetchMock = vi.fn(async (url: string) => {
+        capturedUrl = url;
+        return {
+          ok: true,
+          arrayBuffer: async () => new ArrayBuffer(1),
+        };
+      });
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      try {
+        await maybeApplyTtsToPayload({
+          payload: { text: "Hello world" },
+          cfg: customCfg,
+          kind: "final",
+          inboundAudio: true,
+        });
+
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(capturedUrl).toBe("http://localhost:8880/v1/audio/speech");
+      } finally {
+        globalThis.fetch = originalFetch;
+        process.env.OPENCLAW_TTS_PREFS = prevPrefs;
+      }
+    });
+
+    it("strips inline directive tags before TTS synthesis", async () => {
+      const prevPrefs = process.env.OPENCLAW_TTS_PREFS;
+      process.env.OPENCLAW_TTS_PREFS = `/tmp/tts-test-${Date.now()}.json`;
+      const originalFetch = globalThis.fetch;
+      let capturedBody: string | undefined;
+      const fetchMock = vi.fn(async (_url: string, init?: { body?: string }) => {
+        if (init?.body) {
+          capturedBody = init.body;
+        }
+        return {
+          ok: true,
+          arrayBuffer: async () => new ArrayBuffer(1),
+        };
+      });
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      await maybeApplyTtsToPayload({
+        payload: {
+          text: "[[reply_to_current]] [[audio_as_voice]] The weather today is sunny and warm.",
+        },
+        cfg: baseCfg,
+        kind: "final",
+        inboundAudio: true,
+      });
+
+      // The fetch should have been called (TTS attempted)
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      // The directive tags should NOT appear in the TTS request body
+      if (capturedBody) {
+        expect(capturedBody).not.toContain("reply_to_current");
+        expect(capturedBody).not.toContain("audio_as_voice");
+        expect(capturedBody).toContain("weather today is sunny");
+      }
+
+      globalThis.fetch = originalFetch;
+      process.env.OPENCLAW_TTS_PREFS = prevPrefs;
     });
   });
 });

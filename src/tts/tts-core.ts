@@ -334,15 +334,16 @@ export const OPENAI_TTS_MODELS = ["gpt-4o-mini-tts", "tts-1", "tts-1-hd"] as con
  *
  * Note: Read at runtime (not module load) to support config.env loading.
  */
-function getOpenAITtsBaseUrl(): string {
-  return (process.env.OPENAI_TTS_BASE_URL?.trim() || "https://api.openai.com/v1").replace(
-    /\/+$/,
-    "",
-  );
+function getOpenAITtsBaseUrl(configBaseUrl?: string): string {
+  return (
+    configBaseUrl?.trim() ||
+    process.env.OPENAI_TTS_BASE_URL?.trim() ||
+    "https://api.openai.com/v1"
+  ).replace(/\/+$/, "");
 }
 
-function isCustomOpenAIEndpoint(): boolean {
-  return getOpenAITtsBaseUrl() !== "https://api.openai.com/v1";
+function isCustomOpenAIEndpoint(configBaseUrl?: string): boolean {
+  return getOpenAITtsBaseUrl(configBaseUrl) !== "https://api.openai.com/v1";
 }
 export const OPENAI_TTS_VOICES = [
   "alloy",
@@ -363,17 +364,17 @@ export const OPENAI_TTS_VOICES = [
 
 type OpenAiTtsVoice = (typeof OPENAI_TTS_VOICES)[number];
 
-export function isValidOpenAIModel(model: string): boolean {
+export function isValidOpenAIModel(model: string, configBaseUrl?: string): boolean {
   // Allow any model when using custom endpoint (e.g., Kokoro, LocalAI)
-  if (isCustomOpenAIEndpoint()) {
+  if (isCustomOpenAIEndpoint(configBaseUrl)) {
     return true;
   }
   return OPENAI_TTS_MODELS.includes(model as (typeof OPENAI_TTS_MODELS)[number]);
 }
 
-export function isValidOpenAIVoice(voice: string): voice is OpenAiTtsVoice {
+export function isValidOpenAIVoice(voice: string, configBaseUrl?: string): voice is OpenAiTtsVoice {
   // Allow any voice when using custom endpoint (e.g., Kokoro Chinese voices)
-  if (isCustomOpenAIEndpoint()) {
+  if (isCustomOpenAIEndpoint(configBaseUrl)) {
     return true;
   }
   return OPENAI_TTS_VOICES.includes(voice as OpenAiTtsVoice);
@@ -595,13 +596,14 @@ export async function openaiTTS(params: {
   voice: string;
   responseFormat: "mp3" | "opus" | "pcm";
   timeoutMs: number;
+  baseUrl?: string;
 }): Promise<Buffer> {
-  const { text, apiKey, model, voice, responseFormat, timeoutMs } = params;
+  const { text, apiKey, model, voice, responseFormat, timeoutMs, baseUrl } = params;
 
-  if (!isValidOpenAIModel(model)) {
+  if (!isValidOpenAIModel(model, baseUrl)) {
     throw new Error(`Invalid model: ${model}`);
   }
-  if (!isValidOpenAIVoice(voice)) {
+  if (!isValidOpenAIVoice(voice, baseUrl)) {
     throw new Error(`Invalid voice: ${voice}`);
   }
 
@@ -609,7 +611,7 @@ export async function openaiTTS(params: {
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(`${getOpenAITtsBaseUrl()}/audio/speech`, {
+    const response = await fetch(`${getOpenAITtsBaseUrl(baseUrl)}/audio/speech`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,

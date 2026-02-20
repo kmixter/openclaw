@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
   existsSync,
@@ -378,7 +379,7 @@ export function buildTtsSystemPromptHint(cfg: OpenClawConfig): string | undefine
   const summarize = isSummarizationEnabled(prefsPath) ? "on" : "off";
   const autoHint =
     autoMode === "inbound"
-      ? "Only use TTS when the user's last message includes audio/voice."
+      ? "When the user sends audio/voice, your text reply is automatically converted to speech — do NOT call the tts tool for inbound audio replies."
       : autoMode === "tagged"
         ? "Only use TTS when you include [[tts]] or [[tts:text]] tags."
         : undefined;
@@ -526,7 +527,11 @@ export function resolveTtsApiKey(
     return config.elevenlabs.apiKey || process.env.ELEVENLABS_API_KEY || process.env.XI_API_KEY;
   }
   if (provider === "openai") {
-    return config.openai.apiKey || process.env.OPENAI_API_KEY;
+    return (
+      config.openai.apiKey ||
+      process.env.OPENAI_API_KEY ||
+      (config.openai.baseUrl ? "not-needed" : undefined)
+    );
   }
   return undefined;
 }
@@ -544,6 +549,31 @@ export function isTtsProviderConfigured(config: ResolvedTtsConfig, provider: Tts
   return Boolean(resolveTtsApiKey(config, provider));
 }
 
+/**
+ * Transcode an audio buffer from one format to opus using ffmpeg.
+ * Used when local TTS servers (e.g. Kokoro) don't support native opus output.
+ */
+function transcodeToOpus(inputBuffer: Buffer, inputFormat: string): Buffer {
+  const tmpIn = path.join(resolvePreferredOpenClawTmpDir(), `transcode-in-${Date.now()}.${inputFormat}`);
+  const tmpOut = path.join(resolvePreferredOpenClawTmpDir(), `transcode-out-${Date.now()}.opus`);
+  mkdirSync(path.dirname(tmpIn), { recursive: true, mode: 0o700 });
+  try {
+    writeFileSync(tmpIn, inputBuffer);
+    execFileSync("ffmpeg", ["-y", "-i", tmpIn, "-c:a", "libopus", "-b:a", "24k", "-ar", "48000", tmpOut], {
+      timeout: 30_000,
+      stdio: "pipe",
+    });
+    return readFileSync(tmpOut);
+  } finally {
+    try { unlinkSync(tmpIn); } catch { /* ignore */ }
+    try { unlinkSync(tmpOut); } catch { /* ignore */ }
+  }
+}
+
+/** Check if a baseUrl points to a non-OpenAI local/custom TTS server. */
+function isCustomTtsBaseUrl(baseUrl: string): boolean {
+  return baseUrl !== DEFAULT_OPENAI_BASE_URL;
+}
 function formatTtsProviderError(provider: TtsProvider, err: unknown): string {
   const error = err instanceof Error ? err : new Error(String(err));
   if (error.name === "AbortError") {
@@ -717,6 +747,11 @@ export async function textToSpeech(params: {
       } else {
         const openaiModelOverride = params.overrides?.openai?.model;
         const openaiVoiceOverride = params.overrides?.openai?.voice;
+        // Custom TTS servers (e.g. Kokoro) often don't support native opus
+        // encoding. Request mp3 and transcode to opus locally via ffmpeg.
+        const needsTranscode =
+          isCustomTtsBaseUrl(config.openai.baseUrl) && output.openai === "opus";
+        const requestFormat = needsTranscode ? "mp3" : output.openai;
         audioBuffer = await openaiTTS({
           text: params.text,
           apiKey,
@@ -725,9 +760,13 @@ export async function textToSpeech(params: {
           voice: openaiVoiceOverride ?? config.openai.voice,
           speed: config.openai.speed,
           instructions: config.openai.instructions,
-          responseFormat: output.openai,
+          responseFormat: requestFormat,
           timeoutMs: config.timeoutMs,
+          baseUrl: config.openai.baseUrl,
         });
+        if (needsTranscode) {
+          audioBuffer = transcodeToOpus(audioBuffer, "mp3");
+        }
       }
 
       const latencyMs = Date.now() - providerStart;
@@ -824,6 +863,7 @@ export async function textToSpeechTelephony(params: {
         instructions: config.openai.instructions,
         responseFormat: output.format,
         timeoutMs: config.timeoutMs,
+        baseUrl: config.openai.baseUrl,
       });
 
       return {

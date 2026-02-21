@@ -1025,6 +1025,7 @@ export async function runEmbeddedPiAgent(
                 if (params.onBlockReply) {
                   await params.onBlockReply({
                     text: `⏳ Rate limited. Retrying in ${delaySec}s...`,
+                    immediate: true,
                   });
                 }
                 await new Promise<void>((resolve) => {
@@ -1146,6 +1147,7 @@ export async function runEmbeddedPiAgent(
                     if (params.onBlockReply) {
                       await params.onBlockReply({
                         text: `⏳ Rate limited mid-stream. Retrying in ${delaySec}s...`,
+                        immediate: true,
                       });
                     }
                     await new Promise<void>((resolve) => {

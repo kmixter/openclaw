@@ -12,6 +12,7 @@ import type {
   ChannelOutboundContext,
 } from "../../channels/plugins/types.js";
 import type { OpenClawConfig } from "../../config/config.js";
+import { logVerbose } from "../../globals.js";
 import { resolveMarkdownTableMode } from "../../config/markdown-tables.js";
 import {
   appendAssistantMessageToSessionTranscript,
@@ -424,6 +425,9 @@ async function deliverOutboundPayloadsCore(
     const normalizedText = rawText.replace(/^(?:[ \t]*\r?\n)+/, "");
     if (!normalizedText.trim()) {
       if (!hasMedia) {
+        logVerbose(
+          `reply-delivery: dropping empty WhatsApp payload (raw length=${rawText.length}, replyToId=${payload.replyToId ?? "none"})`,
+        );
         return null;
       }
       return {

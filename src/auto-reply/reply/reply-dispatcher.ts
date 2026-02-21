@@ -1,4 +1,5 @@
 import type { HumanDelayConfig } from "../../config/types.js";
+import { logWarn } from "../../logger.js";
 import { sleep } from "../../utils.js";
 import type { GetReplyOptions, ReplyPayload } from "../types.js";
 import { registerDispatcher } from "./dispatcher-registry.js";
@@ -156,7 +157,11 @@ export function createReplyDispatcher(options: ReplyDispatcherOptions): ReplyDis
         await options.deliver(normalized, { kind });
       })
       .catch((err) => {
-        options.onError?.(err, { kind });
+        if (options.onError) {
+          options.onError(err, { kind });
+        } else {
+          logWarn(`reply-delivery: unhandled ${kind} delivery error: ${String(err)}`);
+        }
       })
       .finally(() => {
         pending -= 1;

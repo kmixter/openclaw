@@ -121,12 +121,14 @@ export function createBlockReplyDeliveryHandler(params: {
     // Use pipeline if available (block streaming enabled), otherwise send directly.
     if (params.blockStreamingEnabled && params.blockReplyPipeline) {
       params.blockReplyPipeline.enqueue(blockPayload);
-    } else if (params.blockStreamingEnabled) {
+    } else if (params.blockStreamingEnabled || blockPayload.immediate) {
       // Send directly when flushing before tool execution (no pipeline but streaming enabled).
+      // Also allow immediate payloads (e.g. rate-limit retry notices) through even with
+      // streaming disabled so external channels can see backoff delays.
       // Track sent key to avoid duplicate in final payloads.
       params.directlySentBlockKeys.add(createBlockReplyPayloadKey(blockPayload));
       await params.onBlockReply(blockPayload);
     }
-    // When streaming is disabled entirely, blocks are accumulated in final text instead.
+    // When streaming is disabled entirely, blocks are suppressed (final text comes from runResult.payloads separately).
   };
 }

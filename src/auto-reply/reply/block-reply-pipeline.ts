@@ -1,4 +1,5 @@
 import { logVerbose } from "../../globals.js";
+import { logWarn } from "../../logger.js";
 import type { ReplyPayload } from "../types.js";
 import { createBlockReplyCoalescer } from "./block-reply-coalescer.js";
 import type { BlockStreamingCoalescing } from "./block-streaming.js";
@@ -136,13 +137,13 @@ export function createBlockReplyPipeline(params: {
           aborted = true;
           if (!didLogTimeout) {
             didLogTimeout = true;
-            logVerbose(
-              `block reply delivery timed out after ${timeoutMs}ms; skipping remaining block replies to preserve ordering`,
+            logWarn(
+              `reply-delivery: block reply delivery timed out after ${timeoutMs}ms; skipping remaining block replies`,
             );
           }
           return;
         }
-        logVerbose(`block reply delivery failed: ${String(err)}`);
+        logWarn(`reply-delivery: block reply delivery failed: ${String(err)}`);
       })
       .finally(() => {
         pendingKeys.delete(payloadKey);

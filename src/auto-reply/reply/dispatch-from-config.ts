@@ -2,6 +2,7 @@ import { resolveSessionAgentId } from "../../agents/agent-scope.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import { loadSessionStore, resolveStorePath } from "../../config/sessions.js";
 import { logVerbose } from "../../globals.js";
+import { logWarn } from "../../logger.js";
 import { createInternalHookEvent, triggerInternalHook } from "../../hooks/internal-hooks.js";
 import { isDiagnosticsEnabled } from "../../infra/diagnostic-events.js";
 import {
@@ -416,8 +417,8 @@ export async function dispatchReplyFromConfig(params: {
           cfg,
         });
         if (!result.ok) {
-          logVerbose(
-            `dispatch-from-config: route-reply (final) failed: ${result.error ?? "unknown error"}`,
+          logWarn(
+            `reply-delivery: route-reply (final) failed: ${result.error ?? "unknown error"}`,
           );
         }
         queuedFinal = result.ok || queuedFinal;

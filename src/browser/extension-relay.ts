@@ -118,6 +118,7 @@ export type ChromeExtensionRelayServer = {
   baseUrl: string;
   cdpWsUrl: string;
   extensionConnected: () => boolean;
+  lockout: () => void;
   stop: () => Promise<void>;
 };
 
@@ -359,6 +360,13 @@ export async function ensureChromeExtensionRelayServer(opts: {
         }, 30_000);
         pendingExtension.set(payload.id, { resolve, reject, timer });
       });
+    };
+
+    const sendLockoutToExtension = () => {
+      const ws = extensionWs;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ method: "lockout" }));
+      }
     };
 
     const broadcastToCdpClients = (evt: CdpEvent) => {
@@ -681,6 +689,13 @@ export async function ensureChromeExtensionRelayServer(opts: {
         return;
       }
 
+      if ((path === "/json/lockout" || path === "/json/lockout/") && req.method === "POST") {
+        sendLockoutToExtension();
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
+        return;
+      }
+
       res.writeHead(404);
       res.end("not found");
     });
@@ -994,6 +1009,7 @@ export async function ensureChromeExtensionRelayServer(opts: {
           baseUrl: info.baseUrl,
           cdpWsUrl: `ws://${info.host}:${info.port}/cdp`,
           extensionConnected: () => false,
+          lockout: () => {},
           stop: async () => {
             relayRuntimeByPort.delete(info.port);
           },
@@ -1017,6 +1033,7 @@ export async function ensureChromeExtensionRelayServer(opts: {
       baseUrl,
       cdpWsUrl: `ws://${host}:${port}/cdp`,
       extensionConnected,
+      lockout: sendLockoutToExtension,
       stop: async () => {
         relayRuntimeByPort.delete(port);
         clearExtensionDisconnectCleanupTimer();

@@ -14,6 +14,9 @@ const BADGE = {
   connecting: { text: '…', color: '#F59E0B' },
   error: { text: '!', color: '#B91C1C' },
 }
+const OPENCLAW_GROUP = { title: 'OpenClaw', color: 'red' }
+
+let openclawGroupId = null
 
 /** @type {WebSocket|null} */
 let relayWs = null
@@ -87,6 +90,33 @@ async function validateAttachedTab(tabId) {
   }
 
   return false
+}
+
+async function ensureTabGroup(tabId) {
+  if (openclawGroupId !== null) {
+    try {
+      await chrome.tabGroups.get(openclawGroupId)
+      await chrome.tabs.group({ groupId: openclawGroupId, tabIds: [tabId] })
+      return
+    } catch {
+      openclawGroupId = null
+    }
+  }
+  const groupId = await chrome.tabs.group({ tabIds: [tabId] })
+  await chrome.tabGroups.update(groupId, {
+    title: OPENCLAW_GROUP.title,
+    color: OPENCLAW_GROUP.color,
+    collapsed: false,
+  })
+  openclawGroupId = groupId
+}
+
+async function removeFromTabGroup(tabId) {
+  try {
+    await chrome.tabs.ungroup([tabId])
+  } catch {
+    // best-effort
+  }
 }
 
 async function getRelayPort() {
@@ -473,6 +503,19 @@ async function onRelayMessage(text) {
     return
   }
 
+  if (msg && msg.method === 'lockout') {
+    for (const tabId of [...tabs.keys()]) {
+      await detachTab(tabId, 'lockout')
+    }
+    openclawGroupId = null
+    try {
+      relayWs?.close(1000, 'lockout')
+    } catch {
+      // ignore
+    }
+    return
+  }
+
   if (msg && typeof msg.id === 'number' && (msg.result !== undefined || msg.error !== undefined)) {
     const p = pending.get(msg.id)
     if (!p) return
@@ -546,6 +589,7 @@ async function attachTab(tabId, opts = {}) {
 
   setBadge(tabId, 'on')
   await persistState()
+  await ensureTabGroup(tabId)
 
   return { sessionId, targetId }
 }
@@ -600,7 +644,7 @@ async function detachTab(tabId, reason) {
     tabId,
     title: 'OpenClaw Browser Relay (click to attach/detach)',
   })
-
+  await removeFromTabGroup(tabId)
   await persistState()
 }
 
@@ -941,6 +985,14 @@ chrome.tabs.onActivated.addListener(({ tabId }) => void whenReady(() => {
     setBadge(tabId, relayWs && relayWs.readyState === WebSocket.OPEN ? 'on' : 'connecting')
   }
 }))
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (tabs.has(tabId)) void detachTab(tabId, 'tab-closed')
+})
+
+chrome.tabGroups.onRemoved.addListener((group) => {
+  if (group.id === openclawGroupId) openclawGroupId = null
+})
 
 chrome.runtime.onInstalled.addListener(() => {
   void chrome.runtime.openOptionsPage()

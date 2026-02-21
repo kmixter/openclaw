@@ -36,6 +36,7 @@ type BrowserProfileActions = {
   openTab: (url: string) => Promise<BrowserTab>;
   focusTab: (targetId: string) => Promise<void>;
   closeTab: (targetId: string) => Promise<void>;
+  lockout: () => Promise<void>;
   stopRunningBrowser: () => Promise<{ stopped: boolean }>;
   resetProfile: () => Promise<{ moved: boolean; from: string; to?: string }>;
 };

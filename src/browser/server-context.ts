@@ -3,6 +3,7 @@ import { isChromeReachable, resolveOpenClawUserDataDir } from "./chrome.js";
 import type { ResolvedBrowserProfile } from "./config.js";
 import { resolveProfile } from "./config.js";
 import { BrowserProfileNotFoundError, toBrowserErrorResponse } from "./errors.js";
+import { ensureChromeExtensionRelayServer } from "./extension-relay.js";
 import { InvalidBrowserNavigationUrlError } from "./navigation-guard.js";
 import { getBrowserProfileCapabilities } from "./profile-capabilities.js";
 import {
@@ -101,6 +102,14 @@ function createProfileContext(
     resolveOpenClawUserDataDir,
   });
 
+  const lockout = async (): Promise<void> => {
+    if (profile.driver !== "extension") {
+      throw new Error("lockout is only supported for extension profiles");
+    }
+    const relay = await ensureChromeExtensionRelayServer({ cdpUrl: profile.cdpUrl });
+    relay.lockout();
+  };
+
   return {
     profile,
     ensureBrowserAvailable,
@@ -111,6 +120,7 @@ function createProfileContext(
     openTab,
     focusTab,
     closeTab,
+    lockout,
     stopRunningBrowser,
     resetProfile,
   };
@@ -247,6 +257,7 @@ export function createBrowserRouteContext(opts: ContextOptions): BrowserRouteCon
     openTab: (url) => getDefaultContext().openTab(url),
     focusTab: (targetId) => getDefaultContext().focusTab(targetId),
     closeTab: (targetId) => getDefaultContext().closeTab(targetId),
+    lockout: () => getDefaultContext().lockout(),
     stopRunningBrowser: () => getDefaultContext().stopRunningBrowser(),
     resetProfile: () => getDefaultContext().resetProfile(),
     mapTabError,

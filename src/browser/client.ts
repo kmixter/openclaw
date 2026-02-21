@@ -142,6 +142,14 @@ export async function browserStop(baseUrl?: string, opts?: { profile?: string })
   });
 }
 
+export async function browserLockout(baseUrl?: string, opts?: { profile?: string }): Promise<void> {
+  const q = buildProfileQuery(opts?.profile);
+  await fetchBrowserJson(withBaseUrl(baseUrl, `/lockout${q}`), {
+    method: "POST",
+    timeoutMs: 15000,
+  });
+}
+
 export async function browserResetProfile(
   baseUrl?: string,
   opts?: { profile?: string },

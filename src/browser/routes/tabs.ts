@@ -167,6 +167,19 @@ export function registerBrowserTabRoutes(app: BrowserRouteRegistrar, ctx: Browse
     });
   });
 
+  app.post("/lockout", async (req, res) => {
+    const profileCtx = getProfileContext(req, ctx);
+    if ("error" in profileCtx) {
+      return jsonError(res, profileCtx.status, profileCtx.error);
+    }
+    try {
+      await profileCtx.lockout();
+      res.json({ ok: true });
+    } catch (err) {
+      jsonError(res, 500, String(err));
+    }
+  });
+
   app.post("/tabs/action", async (req, res) => {
     const action = toStringOrEmpty((req.body as { action?: unknown })?.action);
     const index = toNumber((req.body as { index?: unknown })?.index);

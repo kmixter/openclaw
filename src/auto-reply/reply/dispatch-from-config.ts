@@ -9,6 +9,7 @@ import {
 import { shouldSuppressLocalDiscordExecApprovalPrompt } from "../../discord/exec-approvals.js";
 import { logVerbose } from "../../globals.js";
 import { fireAndForgetHook } from "../../hooks/fire-and-forget.js";
+import { logWarn } from "../../logger.js";
 import { createInternalHookEvent, triggerInternalHook } from "../../hooks/internal-hooks.js";
 import {
   deriveInboundMessageHookContext,
@@ -525,8 +526,8 @@ export async function dispatchReplyFromConfig(params: {
           groupId,
         });
         if (!result.ok) {
-          logVerbose(
-            `dispatch-from-config: route-reply (final) failed: ${result.error ?? "unknown error"}`,
+          logWarn(
+            `reply-delivery: route-reply (final) failed: ${result.error ?? "unknown error"}`,
           );
         }
         queuedFinal = result.ok || queuedFinal;

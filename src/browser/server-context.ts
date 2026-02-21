@@ -485,6 +485,14 @@ function createProfileContext(
     await fetchOk(appendCdpPath(profile.cdpUrl, `/json/close/${resolvedTargetId}`));
   };
 
+  const lockout = async (): Promise<void> => {
+    if (profile.driver !== "extension") {
+      throw new Error("lockout is only supported for extension profiles");
+    }
+    const relay = await ensureChromeExtensionRelayServer({ cdpUrl: profile.cdpUrl });
+    relay.lockout();
+  };
+
   const stopRunningBrowser = async (): Promise<{ stopped: boolean }> => {
     if (profile.driver === "extension") {
       const stopped = await stopChromeExtensionRelayServer({
@@ -554,6 +562,7 @@ function createProfileContext(
     openTab,
     focusTab,
     closeTab,
+    lockout,
     stopRunningBrowser,
     resetProfile,
   };
@@ -680,6 +689,7 @@ export function createBrowserRouteContext(opts: ContextOptions): BrowserRouteCon
     openTab: (url) => getDefaultContext().openTab(url),
     focusTab: (targetId) => getDefaultContext().focusTab(targetId),
     closeTab: (targetId) => getDefaultContext().closeTab(targetId),
+    lockout: () => getDefaultContext().lockout(),
     stopRunningBrowser: () => getDefaultContext().stopRunningBrowser(),
     resetProfile: () => getDefaultContext().resetProfile(),
     mapTabError,

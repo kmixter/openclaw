@@ -132,6 +132,26 @@ export function registerBrowserManageCommands(
     });
 
   browser
+    .command("lockout")
+    .description("Disconnect all extension-controlled tabs and close the relay")
+    .action(async (_opts, cmd) => {
+      const parent = parentOpts(cmd);
+      const profile = parent?.browserProfile;
+      await runBrowserCommand(async () => {
+        await callBrowserRequest(
+          parent,
+          {
+            method: "POST",
+            path: "/lockout",
+            query: profile ? { profile } : undefined,
+          },
+          { timeoutMs: 15000 },
+        );
+        defaultRuntime.log("Lockout complete — all tabs detached, relay disconnected.");
+      });
+    });
+
+  browser
     .command("reset-profile")
     .description("Reset browser profile (moves it to Trash)")
     .action(async (_opts, cmd) => {

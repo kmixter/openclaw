@@ -12,6 +12,7 @@ import {
 import {
   browserCloseTab,
   browserFocusTab,
+  browserLockout,
   browserOpenTab,
   browserProfiles,
   browserSnapshot,
@@ -254,11 +255,12 @@ export function createBrowserTool(opts?: {
     label: "Browser",
     name: "browser",
     description: [
-      "Control the browser via OpenClaw's browser control server (status/start/stop/profiles/tabs/open/snapshot/screenshot/actions).",
+      "Control the browser via OpenClaw's browser control server (status/start/stop/lockout/profiles/tabs/open/snapshot/screenshot/actions).",
       'Profiles: use profile="chrome" for Chrome extension relay takeover (your existing Chrome tabs). Use profile="openclaw" for the isolated openclaw-managed browser.',
       'If the user mentions the Chrome extension / Browser Relay / toolbar button / “attach tab”, ALWAYS use profile="chrome" (do not ask which profile).',
       'When a node-hosted browser proxy is available, the tool may auto-route to it. Pin a node with node=<id|name> or target="node".',
       "Chrome extension relay needs an attached tab: user must click the OpenClaw Browser Relay toolbar icon on the tab (badge ON). If no tab is connected, ask them to attach it.",
+      'lockout (extension profiles only): detaches all tabs and disconnects the relay so the user gets their browser back. When you finish a task using profile="chrome", offer to lockout so the user\'s tabs are no longer under agent control.',
       "When using refs from snapshot (e.g. e12), keep the same tab: prefer passing targetId from the snapshot response into subsequent actions (act/click/type/etc).",
       'For stable, self-resolving refs across calls, use snapshot with refs="aria" (Playwright aria-ref ids). Default refs="role" are role+name-based.',
       "Use snapshot+act for UI automation. Avoid act:wait by default; use only in exceptional cases when no reliable UI state exists.",
@@ -367,6 +369,17 @@ export function createBrowserTool(opts?: {
           }
           await browserStop(baseUrl, { profile });
           return jsonResult(await browserStatus(baseUrl, { profile }));
+        case "lockout":
+          if (proxyRequest) {
+            await proxyRequest({
+              method: "POST",
+              path: "/lockout",
+              profile,
+            });
+            return jsonResult({ ok: true });
+          }
+          await browserLockout(baseUrl, { profile });
+          return jsonResult({ ok: true });
         case "profiles":
           if (proxyRequest) {
             const result = await proxyRequest({

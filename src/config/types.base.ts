@@ -97,6 +97,17 @@ export type SessionThreadBindingsConfig = {
   ttlHours?: number;
 };
 
+export type OnIdleTrigger = {
+  /** Optional label for logs. */
+  name?: string;
+  /** Duration string for idle delay before triggering (e.g., "30m", "4h"). */
+  after: string;
+  /** Workspace file to read (default: "IDLE.md"). Mutually exclusive with prompt. */
+  file?: string;
+  /** Custom prompt to use instead of reading a file. Mutually exclusive with file. */
+  prompt?: string;
+};
+
 export type SessionConfig = {
   scope?: SessionScope;
   /** DM session scoping (default: "main"). */
@@ -122,6 +133,8 @@ export type SessionConfig = {
   threadBindings?: SessionThreadBindingsConfig;
   /** Automatic session store maintenance (pruning, capping, file rotation). */
   maintenance?: SessionMaintenanceConfig;
+  /** Array of idle triggers with per-trigger timeouts and prompts. */
+  onIdle?: OnIdleTrigger[];
 };
 
 export type SessionMaintenanceMode = "enforce" | "warn";

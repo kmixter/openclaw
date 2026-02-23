@@ -635,14 +635,13 @@ export function resolveThinkingDefault(params: {
   model: string;
   catalog?: ModelCatalogEntry[];
 }): ThinkLevel {
-  const _normalizedProvider = normalizeProviderId(params.provider);
-  const _modelLower = params.model.toLowerCase();
+  // 1. Per-model thinkingDefault (highest priority)
   const configuredModels = params.cfg.agents?.defaults?.models;
   const canonicalKey = modelKey(params.provider, params.model);
   const legacyKey = legacyModelKey(params.provider, params.model);
   const perModelThinking =
-    configuredModels?.[canonicalKey]?.params?.thinking ??
-    (legacyKey ? configuredModels?.[legacyKey]?.params?.thinking : undefined);
+    configuredModels?.[canonicalKey]?.thinkingDefault ??
+    (legacyKey ? configuredModels?.[legacyKey]?.thinkingDefault : undefined);
   if (
     perModelThinking === "off" ||
     perModelThinking === "minimal" ||
@@ -654,10 +653,13 @@ export function resolveThinkingDefault(params: {
   ) {
     return perModelThinking;
   }
+
+  // 2. Global thinkingDefault
   const configured = params.cfg.agents?.defaults?.thinkingDefault;
   if (configured) {
     return configured;
   }
+  // 3. Auto-detect from model catalog
   return resolveThinkingDefaultForModel({
     provider: params.provider,
     model: params.model,

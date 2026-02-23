@@ -1,3 +1,8 @@
+import type { OpenClawConfig } from "../../config/config.js";
+import type { ExecAsk, ExecHost, ExecSecurity } from "../../infra/exec-approvals.js";
+import type { ReplyPayload } from "../types.js";
+import type { HandleDirectiveOnlyParams } from "./directive-handling.params.js";
+import type { ElevatedLevel, ReasoningLevel, ThinkLevel } from "./directives.js";
 import {
   resolveAgentConfig,
   resolveAgentDir,
@@ -5,19 +10,15 @@ import {
 } from "../../agents/agent-scope.js";
 import { resolveFastModeState } from "../../agents/fast-mode.js";
 import { resolveSandboxRuntimeStatus } from "../../agents/sandbox.js";
-import type { OpenClawConfig } from "../../config/config.js";
 import { type SessionEntry, updateSessionStore } from "../../config/sessions.js";
-import type { ExecAsk, ExecHost, ExecSecurity } from "../../infra/exec-approvals.js";
 import { enqueueSystemEvent } from "../../infra/system-events.js";
 import { applyVerboseOverride } from "../../sessions/level-overrides.js";
 import { applyModelOverrideToSessionEntry } from "../../sessions/model-overrides.js";
 import { formatThinkingLevels, formatXHighModelHint, supportsXHighThinking } from "../thinking.js";
-import type { ReplyPayload } from "../types.js";
 import {
   maybeHandleModelDirectiveInfo,
   resolveModelSelectionFromDirective,
 } from "./directive-handling.model.js";
-import type { HandleDirectiveOnlyParams } from "./directive-handling.params.js";
 import { maybeHandleQueueDirective } from "./directive-handling.queue-validation.js";
 import {
   formatDirectiveAck,
@@ -26,7 +27,6 @@ import {
   enqueueModeSwitchEvents,
   withOptions,
 } from "./directive-handling.shared.js";
-import type { ElevatedLevel, ReasoningLevel, ThinkLevel } from "./directives.js";
 
 function resolveExecDefaults(params: {
   cfg: OpenClawConfig;
@@ -143,6 +143,21 @@ export async function handleDirectiveOnly(
   const effectiveFastModeSource =
     directives.fastMode !== undefined ? "session" : fastModeState.source;
 
+  if (
+    directives.hasThinkDirective &&
+    !directives.thinkLevel &&
+    directives.rawThinkLevel?.toLowerCase() === "default"
+  ) {
+    delete sessionEntry.thinkingLevel;
+    sessionEntry.updatedAt = Date.now();
+    sessionStore[sessionKey] = sessionEntry;
+    if (storePath) {
+      await updateSessionStore(storePath, (store) => {
+        store[sessionKey] = sessionEntry;
+      });
+    }
+    return { text: "Thinking level reset to default." };
+  }
   if (directives.hasThinkDirective && !directives.thinkLevel) {
     // If no argument was provided, show the current level
     if (!directives.rawThinkLevel) {

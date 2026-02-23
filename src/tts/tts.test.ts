@@ -309,6 +309,7 @@ describe("tts", () => {
       const result = parseTtsDirectives(input, policy);
 
       expect(result.cleanedText).not.toContain("[[tts:");
+      expect(result.cleanedText).not.toContain("[[/tts:");
       expect(result.ttsText).toBe("(laughs) Read the song once more.");
       expect(result.overrides.provider).toBe("elevenlabs");
       expect(result.overrides.elevenlabs?.voiceId).toBe("pMsXgVXv3BLzUgSXRplE");
@@ -331,6 +332,25 @@ describe("tts", () => {
 
       expect(result.overrides.provider).toBeUndefined();
       expect(result.overrides.openai?.voice).toBe("alloy");
+    });
+
+    it("strips orphan [[/tts:text]] closing tags", () => {
+      const policy = resolveModelOverridePolicy({ enabled: true });
+      const input = "[[tts:stability=0.5 style=0.5]] Hello world [[/tts:text]]";
+      const result = parseTtsDirectives(input, policy);
+
+      expect(result.cleanedText.trim()).toBe("Hello world");
+      expect(result.cleanedText).not.toContain("[[/tts:text]]");
+    });
+
+    it("strips orphan closing tags mid-text", () => {
+      const policy = resolveModelOverridePolicy({ enabled: true });
+      const input =
+        "First part [[/tts:text]] second part [[tts:speed=1.2]] third part [[/tts:text]]";
+      const result = parseTtsDirectives(input, policy);
+
+      expect(result.cleanedText.trim()).toBe("First part  second part  third part");
+      expect(result.cleanedText).not.toContain("[[/tts:");
     });
 
     it("keeps text intact when overrides are disabled", () => {

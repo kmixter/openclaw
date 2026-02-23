@@ -24,8 +24,10 @@ import type {
 import { logVerbose } from "../globals.js";
 import { resolvePreferredOpenClawTmpDir } from "../infra/tmp-openclaw-dir.js";
 import { stripMarkdown } from "../line/markdown-to-line.js";
+import { logWarn } from "../logger.js";
 import { isVoiceCompatibleAudio } from "../media/audio.js";
 import { CONFIG_DIR, resolveUserPath } from "../utils.js";
+import { parseInlineDirectives } from "../utils/directive-tags.js";
 import {
   edgeTTS,
   elevenLabsTTS,
@@ -368,7 +370,11 @@ export function buildTtsSystemPromptHint(cfg: OpenClawConfig): string | undefine
     "Voice (TTS) is enabled.",
     autoHint,
     `Keep spoken text ≤${maxLength} chars to avoid auto-summary (summary ${summarize}).`,
-    "Use [[tts:...]] and optional [[tts:text]]...[[/tts:text]] to control voice/expressiveness.",
+    "Use [[tts:key=value ...]] to control voice. Available params (all optional):",
+    "  stability=0‑1 (lower → expressive, higher → steady), style=0‑1 (higher → dramatic),",
+    "  speed=0.5‑2, similarityBoost=0‑1. Example: [[tts:stability=0.4 style=0.7]]",
+    "Use [[tts:text]]alt text[[/tts:text]] to provide separate spoken text from visible text.",
+    "Do NOT use bare words like [[tts:soft]] — they are not supported.",
   ]
     .filter(Boolean)
     .join("\n");
@@ -525,6 +531,20 @@ export function isTtsProviderConfigured(config: ResolvedTtsConfig, provider: Tts
     return config.edge.enabled;
   }
   return Boolean(resolveTtsApiKey(config, provider));
+}
+
+// Strip emoji and residual directive tags (e.g. [[reply_to_current]]) that
+// TTS engines would otherwise verbalize as literal text.
+const EMOJI_RE =
+  /(?:[\p{Emoji_Presentation}\p{Extended_Pictographic}]|\u{200D}|\u{FE0E}|\u{FE0F})+/gu;
+const RESIDUAL_DIRECTIVE_RE = /\[\[[^\]]*\]\]/g;
+
+export function stripTtsNoise(text: string): string {
+  return text
+    .replace(RESIDUAL_DIRECTIVE_RE, "")
+    .replace(EMOJI_RE, "")
+    .replace(/ {2,}/g, " ")
+    .trim();
 }
 
 function formatTtsProviderError(provider: TtsProvider, err: unknown): string {
@@ -811,11 +831,10 @@ export async function maybeApplyTtsToPayload(params: {
     prefsPath,
     sessionAuto: params.ttsAuto,
   });
-  if (autoMode === "off") {
-    return params.payload;
-  }
-
-  const text = params.payload.text ?? "";
+  const rawText = params.payload.text ?? "";
+  // Strip inline directive tags (e.g. [[reply_to_current]], [[audio_as_voice]])
+  // before TTS processing so they don't get read aloud.
+  const text = parseInlineDirectives(rawText).text;
   const directives = parseTtsDirectives(text, config.modelOverrides);
   if (directives.warnings.length > 0) {
     logVerbose(`TTS: ignored directive overrides (${directives.warnings.join("; ")})`);
@@ -834,11 +853,17 @@ export async function maybeApplyTtsToPayload(params: {
           text: visibleText.length > 0 ? visibleText : undefined,
         };
 
-  if (autoMode === "tagged" && !directives.hasDirective) {
+  if (autoMode === "off") {
     return nextPayload;
   }
-  if (autoMode === "inbound" && params.inboundAudio !== true) {
-    return nextPayload;
+  // Explicit [[tts:]] directives always trigger synthesis (unless off).
+  if (!directives.hasDirective) {
+    if (autoMode === "tagged") {
+      return nextPayload;
+    }
+    if (autoMode === "inbound" && params.inboundAudio !== true) {
+      return nextPayload;
+    }
   }
 
   const mode = config.mode ?? "final";
@@ -895,6 +920,7 @@ export async function maybeApplyTtsToPayload(params: {
   }
 
   textForAudio = stripMarkdown(textForAudio).trim(); // strip markdown for TTS (### → "hashtag" etc.)
+  textForAudio = stripTtsNoise(textForAudio);
   if (textForAudio.length < 10) {
     return nextPayload;
   }
@@ -937,7 +963,7 @@ export async function maybeApplyTtsToPayload(params: {
   };
 
   const latency = Date.now() - ttsStart;
-  logVerbose(`TTS: conversion failed after ${latency}ms (${result.error ?? "unknown"}).`);
+  logWarn(`TTS conversion failed after ${latency}ms: ${result.error ?? "unknown"}`);
   return nextPayload;
 }
 
@@ -952,4 +978,5 @@ export const _test = {
   summarizeText,
   resolveOutputFormat,
   resolveEdgeOutputFormat,
+  stripTtsNoise,
 };

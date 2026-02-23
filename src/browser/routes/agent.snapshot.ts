@@ -512,6 +512,19 @@ export function registerBrowserAgentSnapshotRoutes(
                 }
                 throw err;
               });
+        // Truncate role snapshot to maxChars (snapshotAiViaPlaywright does this internally)
+        if (
+          plan.wantsRoleSnapshot &&
+          typeof plan.resolvedMaxChars === "number" &&
+          snap.snapshot.length > plan.resolvedMaxChars
+        ) {
+          const hint =
+            plan.mode === "efficient"
+              ? `Increase maxChars for more detail.`
+              : `Try mode="efficient" for a compact view, or increase maxChars.`;
+          snap.snapshot = `${snap.snapshot.slice(0, plan.resolvedMaxChars)}\n\n[...TRUNCATED - page too large. ${hint}]`;
+          (snap as Record<string, unknown>).truncated = true;
+        }
         if (plan.labels) {
           const labeled = await pw.screenshotWithLabelsViaPlaywright({
             cdpUrl: profileCtx.profile.cdpUrl,

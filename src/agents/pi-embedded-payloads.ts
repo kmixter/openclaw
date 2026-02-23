@@ -3,6 +3,7 @@ export type BlockReplyPayload = {
   mediaUrls?: string[];
   audioAsVoice?: boolean;
   isReasoning?: boolean;
+  immediate?: boolean;
   replyToId?: string;
   replyToTag?: boolean;
   replyToCurrent?: boolean;

@@ -18,6 +18,7 @@ import {
   toPluginMessageReceivedEvent,
 } from "../../hooks/message-hook-mappers.js";
 import { isDiagnosticsEnabled } from "../../infra/diagnostic-events.js";
+import { logWarn } from "../../logger.js";
 import {
   logMessageProcessed,
   logMessageQueued,
@@ -526,9 +527,7 @@ export async function dispatchReplyFromConfig(params: {
           groupId,
         });
         if (!result.ok) {
-          logWarn(
-            `reply-delivery: route-reply (final) failed: ${result.error ?? "unknown error"}`,
-          );
+          logWarn(`reply-delivery: route-reply (final) failed: ${result.error ?? "unknown error"}`);
         }
         queuedFinal = result.ok || queuedFinal;
         if (result.ok) {

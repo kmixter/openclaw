@@ -4,6 +4,7 @@ import { resolveSandboxRuntimeStatus } from "../../agents/sandbox.js";
 import type { SkillCommandSpec } from "../../agents/skills.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import type { SessionEntry } from "../../config/sessions.js";
+import { isInternalMessageChannel } from "../../utils/message-channel.js";
 import { listChatCommands, shouldHandleTextCommands } from "../commands-registry.js";
 import { listSkillCommandsForWorkspace } from "../skill-commands.js";
 import type { MsgContext, TemplateContext } from "../templating.js";
@@ -390,10 +391,16 @@ export async function resolveReplyDirectives(params: {
   model = modelState.model;
 
   // When neither directive nor session set reasoning, default to model capability (e.g. OpenRouter with reasoning: true).
+  // Only auto-enable reasoning for internal channels (webchat); external messaging
+  // channels (WhatsApp, Telegram, etc.) should not receive formatted reasoning blocks.
   const reasoningExplicitlySet =
     directives.reasoningLevel !== undefined ||
     (sessionEntry?.reasoningLevel !== undefined && sessionEntry?.reasoningLevel !== null);
-  if (!reasoningExplicitlySet && resolvedReasoningLevel === "off") {
+  if (
+    !reasoningExplicitlySet &&
+    resolvedReasoningLevel === "off" &&
+    isInternalMessageChannel(messageProviderKey)
+  ) {
     resolvedReasoningLevel = await modelState.resolveDefaultReasoningLevel();
   }
 

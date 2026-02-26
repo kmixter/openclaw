@@ -339,7 +339,17 @@ export const slackPlugin: ChannelPlugin<ResolvedSlackAccount> = {
       });
       return { channel: "slack", ...result };
     },
-    sendMedia: async ({ to, text, mediaUrl, accountId, deps, replyToId, threadId, cfg }) => {
+    sendMedia: async ({
+      to,
+      text,
+      mediaUrl,
+      mediaLocalRoots,
+      accountId,
+      deps,
+      replyToId,
+      threadId,
+      cfg,
+    }) => {
       const send = deps?.sendSlack ?? getSlackRuntime().channel.slack.sendMessageSlack;
       const account = resolveSlackAccount({ cfg, accountId });
       const token = getTokenForOperation(account, "write");
@@ -348,6 +358,7 @@ export const slackPlugin: ChannelPlugin<ResolvedSlackAccount> = {
       const threadTsValue = replyToId ?? threadId;
       const result = await send(to, text, {
         mediaUrl,
+        mediaLocalRoots,
         threadTs: threadTsValue != null ? String(threadTsValue) : undefined,
         accountId: accountId ?? undefined,
         ...(tokenOverride ? { token: tokenOverride } : {}),

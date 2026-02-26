@@ -417,7 +417,6 @@ function registerPluginEntry(cfg: OpenClawConfig, pluginId: string): OpenClawCon
         ...cfg.channels,
         [builtInChannelId]: {
           ...existingRecord,
-          enabled: true,
         },
       },
     };
@@ -490,7 +489,7 @@ export function applyPluginAutoEnable(params: {
             ) {
               return false;
             }
-            return (channelConfig as { enabled?: unknown }).enabled === true;
+            return (channelConfig as { enabled?: unknown }).enabled !== false;
           })()
         : next.plugins?.entries?.[entry.pluginId]?.enabled === true;
     if (alreadyEnabled && !allowMissing) {

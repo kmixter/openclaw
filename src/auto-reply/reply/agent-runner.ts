@@ -732,5 +732,6 @@ export async function runReplyAgent(params: {
   } finally {
     blockReplyPipeline?.stop();
     typing.markRunComplete();
+    typing.markDispatchIdle();
   }
 }

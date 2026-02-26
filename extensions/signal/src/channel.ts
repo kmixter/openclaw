@@ -242,7 +242,7 @@ export const signalPlugin: ChannelPlugin<ResolvedSignalAccount> = {
       });
       return { channel: "signal", ...result };
     },
-    sendMedia: async ({ cfg, to, text, mediaUrl, accountId, deps }) => {
+    sendMedia: async ({ cfg, to, text, mediaUrl, mediaLocalRoots, accountId, deps }) => {
       const send = deps?.sendSignal ?? getSignalRuntime().channel.signal.sendMessageSignal;
       const maxBytes = resolveChannelMediaMaxBytes({
         cfg,
@@ -253,6 +253,7 @@ export const signalPlugin: ChannelPlugin<ResolvedSignalAccount> = {
       });
       const result = await send(to, text, {
         mediaUrl,
+        mediaLocalRoots,
         maxBytes,
         accountId: accountId ?? undefined,
       });

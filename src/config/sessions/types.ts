@@ -174,6 +174,8 @@ export type SessionEntry = {
   systemPromptReport?: SessionSystemPromptReport;
   acp?: SessionAcpMeta;
   systemPromptHash?: string;
+  /** Timestamp (ms) of the last user message (always updated). */
+  lastUserMessageAt?: number;
 };
 
 function normalizeRuntimeField(value: string | undefined): string | undefined {

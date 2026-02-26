@@ -1,6 +1,8 @@
+import type { ResolvedTimeFormat } from "../../agents/date-time.js";
 import { normalizeChatType } from "../../channels/chat-type.js";
 import { resolveSenderLabel } from "../../channels/sender-label.js";
 import { formatZonedTimestamp } from "../../infra/format-time/format-datetime.js";
+import { formatDurationCompact } from "../../infra/format-time/format-duration.js";
 import type { TemplateContext } from "../templating.js";
 
 function safeTrim(value: unknown): string | undefined {
@@ -29,6 +31,63 @@ function formatConversationTimestamp(value: unknown): string | undefined {
   } catch {
     return formatted;
   }
+}
+
+export type TimeFields = {
+  current_time?: string;
+  time_since_last_user_message?: string;
+};
+
+const SUPPRESSION_WINDOW_MS = 3 * 60 * 1000;
+
+/**
+ * Build compact time fields for conversationInfo metadata.
+ *
+ * - First message (no lastUserMessageAt): returns { current_time } only.
+ * - Subsequent <=3 min since last user message: returns {} (suppressed, user is in flow).
+ * - Subsequent >3 min: returns both current_time and time_since_last_user_message.
+ */
+export function buildTimeFields(opts: {
+  /** When the last user message was received (always tracked). */
+  lastUserMessageAt?: number;
+  nowMs: number;
+  userTimezone: string;
+  timeFormat: ResolvedTimeFormat;
+}): TimeFields {
+  const { lastUserMessageAt, nowMs, userTimezone, timeFormat } = opts;
+
+  // Suppressed: user is in flow (messages within 3 minutes)
+  if (lastUserMessageAt != null && nowMs - lastUserMessageAt <= SUPPRESSION_WINDOW_MS) {
+    return {};
+  }
+
+  const use24Hour = timeFormat === "24";
+  const date = new Date(nowMs);
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    timeZone: userTimezone,
+    weekday: "short",
+  }).format(date);
+  const time = new Intl.DateTimeFormat("en-US", {
+    timeZone: userTimezone,
+    hour: "numeric",
+    minute: "2-digit",
+    hourCycle: use24Hour ? "h23" : "h12",
+  }).format(date);
+  const currentTime = `${weekday} ${time}`;
+
+  // First message: no elapsed duration
+  if (lastUserMessageAt == null) {
+    return { current_time: currentTime };
+  }
+
+  // >3 min: include both fields (round to nearest minute)
+  const elapsedMs = nowMs - lastUserMessageAt;
+  const elapsedMinutes = Math.round(elapsedMs / 60_000) * 60_000;
+  const elapsed = formatDurationCompact(elapsedMinutes, { spaced: true });
+  return {
+    current_time: currentTime,
+    time_since_last_user_message: elapsed,
+  };
 }
 
 function resolveInboundChannel(ctx: TemplateContext): string | undefined {
@@ -81,7 +140,10 @@ export function buildInboundMetaSystemPrompt(ctx: TemplateContext): string {
   ].join("\n");
 }
 
-export function buildInboundUserContextPrefix(ctx: TemplateContext): string {
+export function buildInboundUserContextPrefix(
+  ctx: TemplateContext,
+  options?: { timeFields?: TimeFields },
+): string {
   const blocks: string[] = [];
   const chatType = normalizeChatType(ctx.ChatType);
   const isDirect = !chatType || chatType === "direct";
@@ -123,6 +185,7 @@ export function buildInboundUserContextPrefix(ctx: TemplateContext): string {
       Array.isArray(ctx.InboundHistory) && ctx.InboundHistory.length > 0
         ? ctx.InboundHistory.length
         : undefined,
+    ...options?.timeFields,
   };
   if (Object.values(conversationInfo).some((v) => v !== undefined)) {
     blocks.push(

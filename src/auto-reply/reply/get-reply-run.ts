@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { resolveSessionAuthProfileOverride } from "../../agents/auth-profiles/session-override.js";
 import type { ExecToolDefaults } from "../../agents/bash-tools.js";
+import { resolveUserTimeFormat, resolveUserTimezone } from "../../agents/date-time.js";
 import { resolveModelAuthLabel } from "../../agents/model-auth-label.js";
 import {
   abortEmbeddedPiRun,
@@ -39,7 +40,11 @@ import { applySessionHints } from "./body.js";
 import type { buildCommandContext } from "./commands.js";
 import type { InlineDirectives } from "./directive-handling.js";
 import { buildGroupChatContext, buildGroupIntro } from "./groups.js";
-import { buildInboundMetaSystemPrompt, buildInboundUserContextPrefix } from "./inbound-meta.js";
+import {
+  buildInboundMetaSystemPrompt,
+  buildInboundUserContextPrefix,
+  buildTimeFields,
+} from "./inbound-meta.js";
 import type { createModelSelectionState } from "./model-selection.js";
 import { resolveQueueSettings } from "./queue.js";
 import { routeReply } from "./route-reply.js";
@@ -209,6 +214,33 @@ export async function runPreparedReply(
     isNewSession &&
     ((baseBodyTrimmedRaw.length === 0 && rawBodyTrimmed.length > 0) || isBareNewOrReset);
   const baseBodyFinal = isBareSessionReset ? BARE_SESSION_RESET_PROMPT : baseBody;
+  const nowMs = Date.now();
+  const agentDefaults = cfg.agents?.defaults;
+  const userTimezone = resolveUserTimezone(agentDefaults?.userTimezone);
+  const userTimeFormat = resolveUserTimeFormat(agentDefaults?.timeFormat);
+  const timeFields = buildTimeFields({
+    lastUserMessageAt: sessionEntry?.lastUserMessageAt,
+    nowMs,
+    userTimezone,
+    timeFormat: userTimeFormat,
+  });
+  const timeFieldsIncluded =
+    timeFields.current_time !== undefined || timeFields.time_since_last_user_message !== undefined;
+  // Persist user message timestamp for elapsed-time tracking (skip heartbeats/idle/cron)
+  if (!isHeartbeat && sessionEntry && sessionStore && sessionKey) {
+    sessionEntry.lastUserMessageAt = nowMs;
+    sessionEntry.updatedAt = nowMs;
+    sessionStore[sessionKey] = sessionEntry;
+    if (storePath) {
+      await updateSessionStore(storePath, (store) => {
+        const entry = store[sessionKey];
+        if (entry) {
+          entry.lastUserMessageAt = nowMs;
+          entry.updatedAt = nowMs;
+        }
+      });
+    }
+  }
   const inboundUserContext = buildInboundUserContextPrefix(
     isNewSession
       ? {
@@ -218,6 +250,7 @@ export async function runPreparedReply(
             : {}),
         }
       : { ...sessionCtx, ThreadStarterBody: undefined },
+    { timeFields: timeFieldsIncluded ? timeFields : undefined },
   );
   const baseBodyForPrompt = isBareSessionReset
     ? baseBodyFinal

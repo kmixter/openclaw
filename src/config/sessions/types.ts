@@ -115,6 +115,8 @@ export type SessionEntry = {
   skillsSnapshot?: SessionSkillSnapshot;
   systemPromptReport?: SessionSystemPromptReport;
   systemPromptHash?: string;
+  /** Timestamp (ms) of the last user message (always updated). */
+  lastUserMessageAt?: number;
 };
 
 export function mergeSessionEntry(

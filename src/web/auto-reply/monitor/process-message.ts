@@ -12,6 +12,7 @@ import {
 } from "../../../auto-reply/reply/history.js";
 import { finalizeInboundContext } from "../../../auto-reply/reply/inbound-context.js";
 import { dispatchReplyWithBufferedBlockDispatcher } from "../../../auto-reply/reply/provider-dispatcher.js";
+import { formatToolPrefix } from "../../../auto-reply/tool-meta.js";
 import type { ReplyPayload } from "../../../auto-reply/types.js";
 import { toLocationContext } from "../../../channels/location.js";
 import { createReplyPrefixOptions } from "../../../channels/reply-prefix.js";
@@ -422,6 +423,30 @@ export async function processMessage(params: {
           ? !params.cfg.channels.whatsapp.blockStreaming
           : undefined,
       onModelSelected,
+      onToolStart: async (payload) => {
+        if (params.msg.chatType === "group") {
+          return;
+        }
+        const display =
+          payload.phase === "update"
+            ? formatToolPrefix(payload.name, "updating")
+            : formatToolPrefix(payload.name, undefined, payload.args);
+        if (!display) {
+          return;
+        }
+        await deliverWebReply({
+          replyResult: { text: display },
+          msg: params.msg,
+          mediaLocalRoots,
+          maxMediaBytes: params.maxMediaBytes,
+          textLimit,
+          chunkMode,
+          replyLogger: params.replyLogger,
+          connectionId: params.connectionId,
+          skipLog: true,
+          tableMode,
+        });
+      },
     },
   });
 

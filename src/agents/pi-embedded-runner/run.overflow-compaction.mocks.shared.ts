@@ -199,6 +199,10 @@ vi.mock(import("../../utils/message-channel.js"), async (importOriginal) => {
   };
 });
 
+vi.mock("../../infra/agent-events.js", () => ({
+  emitAgentEvent: vi.fn(),
+}));
+
 vi.mock("../agent-paths.js", () => ({
   resolveOpenClawAgentDir: vi.fn(() => "/tmp/agent-dir"),
 }));

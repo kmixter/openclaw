@@ -5,6 +5,7 @@ import {
   ensureContextEnginesInitialized,
   resolveContextEngine,
 } from "../../context-engine/index.js";
+import { emitAgentEvent } from "../../infra/agent-events.js";
 import { computeBackoff, sleepWithAbort, type BackoffPolicy } from "../../infra/backoff.js";
 import { generateSecureToken } from "../../infra/secure-random.js";
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
@@ -1039,6 +1040,16 @@ export async function runEmbeddedPiAgent(
               log.warn(
                 `proactive compaction: prompt tokens (${currentPromptTokens}) exceed cap (${ctxInfo.tokens}) for ${provider}/${modelId}; compacting session`,
               );
+              emitAgentEvent({
+                runId: params.runId,
+                stream: "compaction",
+                data: { phase: "start" },
+              });
+              void params.onAgentEvent?.({
+                stream: "compaction",
+                data: { phase: "start" },
+              });
+
               let compactResult: Awaited<ReturnType<typeof contextEngine.compact>>;
               try {
                 compactResult = await contextEngine.compact({
@@ -1091,6 +1102,17 @@ export async function runEmbeddedPiAgent(
                     total: tokensAfter,
                   };
                 }
+
+                // Emit end event so agent-runner-execution.ts sets autoCompactionCompleted = true
+                emitAgentEvent({
+                  runId: params.runId,
+                  stream: "compaction",
+                  data: { phase: "end", willRetry: false },
+                });
+                void params.onAgentEvent?.({
+                  stream: "compaction",
+                  data: { phase: "end", willRetry: false },
+                });
               } else {
                 log.warn(
                   `proactive compaction failed for ${provider}/${modelId}: ${compactResult.reason ?? "nothing to compact"}`,

@@ -665,8 +665,7 @@ export async function runReplyAgent(params: {
       }
     }
 
-    const agentCompactionCount = runResult.meta?.agentMeta?.compactionCount ?? 0;
-    if (autoCompactionCompleted || agentCompactionCount > 0) {
+    if (autoCompactionCompleted) {
       const count = await incrementRunCompactionCount({
         sessionEntry: activeSessionEntry,
         sessionStore: activeSessionStore,

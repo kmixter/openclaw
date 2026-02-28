@@ -1,5 +1,6 @@
 import "./run.overflow-compaction.mocks.shared.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { emitAgentEvent } from "../../infra/agent-events.js";
 import { isCompactionFailureError, isLikelyContextOverflowError } from "../pi-embedded-helpers.js";
 
 vi.mock(import("../../utils.js"), async (importOriginal) => {
@@ -28,6 +29,8 @@ import {
   overflowBaseRunParams as baseParams,
 } from "./run.overflow-compaction.shared-test.js";
 import type { EmbeddedRunAttemptResult } from "./run/types.js";
+
+const mockedEmitAgentEvent = vi.mocked(emitAgentEvent);
 
 const mockedIsCompactionFailureError = vi.mocked(isCompactionFailureError);
 const mockedIsLikelyContextOverflowError = vi.mocked(isLikelyContextOverflowError);
@@ -376,5 +379,102 @@ describe("overflow compaction in run loop", () => {
 
     expect(mockedCompactDirect).toHaveBeenCalledTimes(1);
     expect(result.meta.agentMeta?.promptTokens).toBe(90_000);
+  });
+
+  it("emits compaction start and end events on successful proactive compaction", async () => {
+    const onAgentEvent = vi.fn();
+
+    mockedRunEmbeddedAttempt.mockResolvedValue(
+      makeAttemptResult({
+        lastAssistant: {
+          stopReason: "end_turn",
+          usage: {
+            input: 220_000,
+            total: 220_000,
+          },
+        } as unknown as EmbeddedRunAttemptResult["lastAssistant"],
+      }),
+    );
+
+    mockedCompactDirect.mockResolvedValueOnce({
+      ok: true,
+      compacted: true,
+      result: {
+        summary: "Compacted session",
+        firstKeptEntryId: "entry-7",
+        tokensBefore: 220_000,
+        tokensAfter: 90_000,
+      },
+    });
+
+    await runEmbeddedPiAgent({ ...baseParams, onAgentEvent });
+
+    // emitAgentEvent should have been called with start and end
+    expect(mockedEmitAgentEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: baseParams.runId,
+        stream: "compaction",
+        data: { phase: "start" },
+      }),
+    );
+    expect(mockedEmitAgentEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: baseParams.runId,
+        stream: "compaction",
+        data: { phase: "end", willRetry: false },
+      }),
+    );
+
+    // onAgentEvent callback should also have been called
+    expect(onAgentEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stream: "compaction",
+        data: { phase: "start" },
+      }),
+    );
+    expect(onAgentEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stream: "compaction",
+        data: { phase: "end", willRetry: false },
+      }),
+    );
+  });
+
+  it("does not emit compaction end event when proactive compaction fails", async () => {
+    mockedRunEmbeddedAttempt.mockResolvedValue(
+      makeAttemptResult({
+        lastAssistant: {
+          stopReason: "end_turn",
+          usage: {
+            input: 220_000,
+            total: 220_000,
+          },
+        } as unknown as EmbeddedRunAttemptResult["lastAssistant"],
+      }),
+    );
+
+    mockedCompactDirect.mockResolvedValueOnce({
+      ok: false,
+      compacted: false,
+      reason: "nothing to compact",
+    });
+
+    await runEmbeddedPiAgent(baseParams);
+
+    // Start event should still be emitted
+    expect(mockedEmitAgentEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stream: "compaction",
+        data: { phase: "start" },
+      }),
+    );
+
+    // End event should NOT be emitted since compaction failed
+    expect(mockedEmitAgentEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        stream: "compaction",
+        data: { phase: "end", willRetry: false },
+      }),
+    );
   });
 });

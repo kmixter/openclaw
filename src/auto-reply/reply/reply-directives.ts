@@ -1,6 +1,6 @@
 import { splitMediaFromOutput } from "../../media/parse.js";
 import { parseInlineDirectives } from "../../utils/directive-tags.js";
-import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../tokens.js";
+import { isSilentReplyText, SILENT_REPLY_TOKEN, stripMisusedSilentToken } from "../tokens.js";
 
 export type ReplyDirectiveParseResult = {
   text: string;
@@ -11,6 +11,7 @@ export type ReplyDirectiveParseResult = {
   replyToTag: boolean;
   audioAsVoice?: boolean;
   isSilent: boolean;
+  silentTokenStripped: boolean;
 };
 
 export function parseReplyDirectives(
@@ -31,9 +32,19 @@ export function parseReplyDirectives(
   }
 
   const silentToken = options.silentToken ?? SILENT_REPLY_TOKEN;
-  const isSilent = isSilentReplyText(text, silentToken);
+  let isSilent = isSilentReplyText(text, silentToken);
+  let silentTokenStripped = false;
+
   if (isSilent) {
-    text = "";
+    // Check if the model incorrectly appended NO_REPLY to real content.
+    const stripped = stripMisusedSilentToken(text, silentToken);
+    if (stripped) {
+      text = stripped;
+      isSilent = false;
+      silentTokenStripped = true;
+    } else {
+      text = "";
+    }
   }
 
   return {
@@ -45,5 +56,6 @@ export function parseReplyDirectives(
     replyToTag: replyParsed.hasReplyTag,
     audioAsVoice: split.audioAsVoice,
     isSilent,
+    silentTokenStripped,
   };
 }

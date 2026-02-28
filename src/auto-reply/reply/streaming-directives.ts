@@ -1,6 +1,6 @@
 import { splitMediaFromOutput } from "../../media/parse.js";
 import { parseInlineDirectives } from "../../utils/directive-tags.js";
-import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../tokens.js";
+import { isSilentReplyText, SILENT_REPLY_TOKEN, stripMisusedSilentToken } from "../tokens.js";
 import type { ReplyDirectiveParseResult } from "./reply-directives.js";
 
 type PendingReplyState = {
@@ -47,9 +47,18 @@ const parseChunk = (raw: string, options?: { silentToken?: string }): ParsedChun
   }
 
   const silentToken = options?.silentToken ?? SILENT_REPLY_TOKEN;
-  const isSilent = isSilentReplyText(text, silentToken);
+  let isSilent = isSilentReplyText(text, silentToken);
+  let silentTokenStripped = false;
+
   if (isSilent) {
-    text = "";
+    const stripped = stripMisusedSilentToken(text, silentToken);
+    if (stripped) {
+      text = stripped;
+      isSilent = false;
+      silentTokenStripped = true;
+    } else {
+      text = "";
+    }
   }
 
   return {
@@ -62,6 +71,7 @@ const parseChunk = (raw: string, options?: { silentToken?: string }): ParsedChun
     replyToTag: replyParsed.hasReplyTag,
     audioAsVoice: split.audioAsVoice,
     isSilent,
+    silentTokenStripped,
   };
 };
 

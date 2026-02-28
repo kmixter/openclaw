@@ -284,6 +284,11 @@ export function handleMessageEnd(
   const formattedReasoning = rawThinking ? formatReasoningMessage(rawThinking) : "";
   const trimmedText = text.trim();
   const parsedText = trimmedText ? parseReplyDirectives(stripTrailingDirective(trimmedText)) : null;
+  if (parsedText?.silentTokenStripped) {
+    ctx.log.warn(
+      `Model appended NO_REPLY to real content (${trimmedText.length} chars) — stripped token and delivering reply`,
+    );
+  }
   let cleanedText = parsedText?.text ?? "";
   let mediaUrls = parsedText?.mediaUrls;
   let hasMedia = Boolean(mediaUrls && mediaUrls.length > 0);

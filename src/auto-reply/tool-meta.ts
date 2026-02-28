@@ -69,9 +69,9 @@ export function formatToolAggregate(
   return `${prefix}: ${formatMetaForDisplay(toolName, meta, options?.markdown)}`;
 }
 
-export function formatToolPrefix(toolName?: string, meta?: string) {
+export function formatToolPrefix(toolName?: string, meta?: string, args?: unknown) {
   const extra = meta?.trim() ? shortenMeta(meta) : undefined;
-  const display = resolveToolDisplay({ name: toolName, meta: extra });
+  const display = resolveToolDisplay({ name: toolName, meta: extra, args });
   return formatToolSummary(display);
 }
 

@@ -149,6 +149,10 @@ vi.mock("../../utils/message-channel.js", () => ({
   isMarkdownCapableMessageChannel: vi.fn(() => true),
 }));
 
+vi.mock("../../infra/agent-events.js", () => ({
+  emitAgentEvent: vi.fn(),
+}));
+
 vi.mock("../agent-paths.js", () => ({
   resolveOpenClawAgentDir: vi.fn(() => "/tmp/agent-dir"),
 }));

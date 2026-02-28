@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import fs from "node:fs/promises";
 import type { ThinkLevel } from "../../auto-reply/thinking.js";
+import { emitAgentEvent } from "../../infra/agent-events.js";
 import { generateSecureToken } from "../../infra/secure-random.js";
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
 import type { PluginHookBeforeAgentStartResult } from "../../plugins/types.js";
@@ -753,6 +754,16 @@ export async function runEmbeddedPiAgent(
               log.warn(
                 `proactive compaction: prompt tokens (${currentPromptTokens}) exceed cap (${ctxInfo.tokens}) for ${provider}/${modelId}; compacting session`,
               );
+              emitAgentEvent({
+                runId: params.runId,
+                stream: "compaction",
+                data: { phase: "start" },
+              });
+              void params.onAgentEvent?.({
+                stream: "compaction",
+                data: { phase: "start" },
+              });
+
               const compactResult = await runCompaction();
               if (compactResult.compacted) {
                 autoCompactionCount += 1;
@@ -769,6 +780,17 @@ export async function runEmbeddedPiAgent(
                     total: tokensAfter,
                   };
                 }
+
+                // Emit end event so agent-runner-execution.ts sets autoCompactionCompleted = true
+                emitAgentEvent({
+                  runId: params.runId,
+                  stream: "compaction",
+                  data: { phase: "end", willRetry: false },
+                });
+                void params.onAgentEvent?.({
+                  stream: "compaction",
+                  data: { phase: "end", willRetry: false },
+                });
               } else {
                 log.warn(
                   `proactive compaction failed for ${provider}/${modelId}: ${compactResult.reason ?? "nothing to compact"}`,

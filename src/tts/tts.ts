@@ -782,7 +782,6 @@ export async function textToSpeech(params: {
           instructions: config.openai.instructions,
           responseFormat: requestFormat,
           timeoutMs: config.timeoutMs,
-          baseUrl: config.openai.baseUrl,
         });
         if (needsTranscode) {
           audioBuffer = transcodeToOpus(audioBuffer, "mp3");
@@ -883,7 +882,6 @@ export async function textToSpeechTelephony(params: {
         instructions: config.openai.instructions,
         responseFormat: output.format,
         timeoutMs: config.timeoutMs,
-        baseUrl: config.openai.baseUrl,
       });
 
       return {
@@ -943,10 +941,7 @@ export async function maybeApplyTtsToPayload(params: {
           text: visibleText.length > 0 ? visibleText : undefined,
         };
 
-  if (autoMode === "off") {
-    return nextPayload;
-  }
-  // Explicit [[tts:]] directives always trigger synthesis (unless off).
+  // Explicit [[tts:]] directives always trigger synthesis (unless off — handled above).
   if (!directives.hasDirective) {
     if (autoMode === "tagged") {
       return nextPayload;

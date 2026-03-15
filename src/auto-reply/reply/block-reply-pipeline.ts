@@ -1,4 +1,3 @@
-import { logVerbose } from "../../globals.js";
 import { logWarn } from "../../logger.js";
 import type { ReplyPayload } from "../types.js";
 import { createBlockReplyCoalescer } from "./block-reply-coalescer.js";

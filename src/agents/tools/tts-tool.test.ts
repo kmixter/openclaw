@@ -12,7 +12,7 @@ const textToSpeechSpy = vi.fn().mockResolvedValue({
   voiceCompatible: false,
 });
 vi.mock("../../tts/tts.js", async (importOriginal) => {
-  const actual = await importOriginal();
+  const actual = await importOriginal<typeof import("../../tts/tts.js")>();
   return {
     ...actual,
     textToSpeech: (...args: unknown[]) => textToSpeechSpy(...args),

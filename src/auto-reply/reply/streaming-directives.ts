@@ -52,8 +52,7 @@ const parseChunk = (raw: string, options?: { silentToken?: string }): ParsedChun
   }
 
   const silentToken = options?.silentToken ?? SILENT_REPLY_TOKEN;
-  let isSilent =
-    isSilentReplyText(text, silentToken) || isSilentReplyPrefixText(text, silentToken);
+  let isSilent = isSilentReplyText(text, silentToken) || isSilentReplyPrefixText(text, silentToken);
   let silentTokenStripped = false;
 
   if (isSilent) {

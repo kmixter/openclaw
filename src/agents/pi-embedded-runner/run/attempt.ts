@@ -1764,7 +1764,7 @@ export async function runEmbeddedAttempt(
 
       // Persist system prompt to JSONL when it changes.
       const promptHash = crypto.createHash("sha256").update(appendPrompt).digest("hex");
-      if (promptHash \!== params.systemPromptHash) {
+      if (promptHash !== params.systemPromptHash) {
         try {
           const previousText = lastSystemPromptBySession.get(params.sessionId);
           const diffText = previousText

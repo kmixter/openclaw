@@ -9,7 +9,6 @@ import {
 import { shouldSuppressLocalDiscordExecApprovalPrompt } from "../../discord/exec-approvals.js";
 import { logVerbose } from "../../globals.js";
 import { fireAndForgetHook } from "../../hooks/fire-and-forget.js";
-import { logWarn } from "../../logger.js";
 import { createInternalHookEvent, triggerInternalHook } from "../../hooks/internal-hooks.js";
 import {
   deriveInboundMessageHookContext,

@@ -16,6 +16,11 @@
       "title": "Tool Call",
       "detailKeys": []
     },
+    "session_reset": {
+      "emoji": "🔄",
+      "title": "Session Reset",
+      "detailKeys": ["message"]
+    },
     "session_status": {
       "emoji": "📊",
       "title": "Session Status",

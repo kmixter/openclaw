@@ -18,6 +18,7 @@ import {
   updateSessionStore,
 } from "../../config/sessions.js";
 import { logVerbose } from "../../globals.js";
+import { enqueueSystemEvent } from "../../infra/system-events.js";
 import { clearCommandLane, getQueueSize } from "../../process/command-queue.js";
 import { normalizeMainKey } from "../../routing/session-key.js";
 import { isReasoningTagProvider } from "../../utils/provider-utils.js";
@@ -364,6 +365,26 @@ export async function runPreparedReply(
     storePath,
     abortKey: command.abortKey,
   });
+  // Drain persisted pendingSystemMessage into the system event queue so it
+  // appears as a System: prefix in the user message (visible in transcript).
+  const pendingSystemMessage = sessionEntry?.pendingSystemMessage;
+  if (pendingSystemMessage && sessionKey) {
+    enqueueSystemEvent(pendingSystemMessage, { sessionKey });
+    if (sessionEntry) {
+      sessionEntry.pendingSystemMessage = undefined;
+    }
+    if (sessionStore && sessionKey) {
+      sessionStore[sessionKey] = sessionEntry!;
+    }
+    if (storePath && sessionKey) {
+      await updateSessionStore(storePath, (store) => {
+        const entry = store[sessionKey];
+        if (entry) {
+          entry.pendingSystemMessage = undefined;
+        }
+      });
+    }
+  }
   const isGroupSession = sessionEntry?.chatType === "group" || sessionEntry?.chatType === "channel";
   const isMainSession = !isGroupSession && sessionKey === normalizeMainKey(sessionCfg?.mainKey);
   // Extract first-token think hint from the user body BEFORE prepending system events.

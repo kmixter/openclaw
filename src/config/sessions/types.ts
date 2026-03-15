@@ -176,6 +176,8 @@ export type SessionEntry = {
   systemPromptHash?: string;
   /** Timestamp (ms) of the last user message (always updated). */
   lastUserMessageAt?: number;
+  /** System message injected by session_reset tool. Prepended to the next user message, then cleared. */
+  pendingSystemMessage?: string;
 };
 
 function normalizeRuntimeField(value: string | undefined): string | undefined {

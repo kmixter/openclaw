@@ -279,6 +279,11 @@
         "steer": { "label": "steer", "detailKeys": ["target"] }
       }
     },
+    "session_reset": {
+      "emoji": "🔄",
+      "title": "Session Reset",
+      "detailKeys": ["message"]
+    },
     "session_status": {
       "emoji": "📊",
       "title": "Session Status",

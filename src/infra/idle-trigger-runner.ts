@@ -145,8 +145,11 @@ function resolveIdleTriggerPrompt(trigger: OnIdleTrigger, fileContent?: string |
  *
  * Conditions:
  * 1. Session has activity (updatedAt exists)
- * 2. Session is idle (now - updatedAt > delayMs)
- * 3. New activity since last trigger: updatedAt > lastIdleTriggeredAt[triggerKey]
+ * 2. Session is idle long enough since last *user* message
+ * 3. New user activity since last trigger: lastUserMessageAt > lastIdleTriggeredAt[triggerKey]
+ *
+ * Uses lastUserMessageAt when available so that agent/idle-trigger responses
+ * (which bump updatedAt) do not reset the idle clock.
  */
 function shouldTriggerForSession(params: {
   entry: SessionEntry;
@@ -162,15 +165,19 @@ function shouldTriggerForSession(params: {
     return false;
   }
 
+  // Use lastUserMessageAt for idle calculation so that agent/idle responses
+  // don't reset the idle clock. Fall back to updatedAt for legacy entries.
+  const idleReference = entry.lastUserMessageAt ?? entry.updatedAt;
+
   // Must be idle for long enough
-  const idleMs = nowMs - entry.updatedAt;
+  const idleMs = nowMs - idleReference;
   if (idleMs < delayMs) {
     return false; // Too noisy to log - this is normal
   }
 
   // Check per-trigger timestamp first (new system)
   const lastTriggeredAt = entry.lastIdleTriggeredAt?.[triggerKey];
-  if (typeof lastTriggeredAt === "number" && entry.updatedAt <= lastTriggeredAt) {
+  if (typeof lastTriggeredAt === "number" && idleReference <= lastTriggeredAt) {
     return false;
   }
 
@@ -178,6 +185,7 @@ function shouldTriggerForSession(params: {
     sessionKey,
     triggerKey,
     updatedAt: entry.updatedAt,
+    lastUserMessageAt: entry.lastUserMessageAt,
     lastTriggeredAt,
     idleMs,
   });

@@ -333,6 +333,210 @@ describe("idle-trigger-runner", () => {
       }
     });
 
+    it("uses lastUserMessageAt for idle calculation, ignoring agent-bumped updatedAt", async () => {
+      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-idle-"));
+      const storePath = path.join(tmpDir, "sessions.json");
+      const replySpy = vi.spyOn(replyModule, "getReplyFromConfig");
+
+      try {
+        await fs.writeFile(
+          path.join(tmpDir, DEFAULT_IDLE_TRIGGER_FILENAME),
+          "# Idle Tasks\n- Save memories",
+        );
+
+        const cfg: OpenClawConfig = {
+          agents: {
+            defaults: {
+              workspace: tmpDir,
+            },
+          },
+          session: {
+            store: storePath,
+            onIdle: [
+              { name: "short-check", after: "1h" },
+              { name: "long-check", after: "4h" },
+            ],
+          },
+        };
+
+        const now = Date.now();
+        // User messaged 5 hours ago, but an idle trigger bumped updatedAt 30 min ago
+        const lastUserMessage = now - 5 * 60 * 60 * 1000;
+        const lastAgentUpdate = now - 30 * 60 * 1000;
+
+        await fs.writeFile(
+          storePath,
+          JSON.stringify(
+            {
+              "main:main": {
+                sessionId: "sid",
+                updatedAt: lastAgentUpdate,
+                lastUserMessageAt: lastUserMessage,
+                origin: {
+                  provider: "whatsapp",
+                  from: "+15551234567",
+                },
+              },
+            },
+            null,
+            2,
+          ),
+        );
+
+        replySpy.mockResolvedValue({ text: "IDLE_OK" });
+
+        const result = await runIdleTriggerOnce({
+          cfg,
+          deps: {
+            getQueueSize: () => 0,
+            nowMs: () => now,
+          },
+        });
+
+        expect(result.status).toBe("ran");
+        // Both triggers should fire: user has been idle for 5h (> 1h and > 4h)
+        // Without the fix, long-check wouldn't fire because updatedAt was only 30min ago
+        expect(replySpy).toHaveBeenCalledTimes(2);
+      } finally {
+        replySpy.mockRestore();
+        await fs.rm(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it("falls back to updatedAt when lastUserMessageAt is not set", async () => {
+      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-idle-"));
+      const storePath = path.join(tmpDir, "sessions.json");
+      const replySpy = vi.spyOn(replyModule, "getReplyFromConfig");
+
+      try {
+        await fs.writeFile(
+          path.join(tmpDir, DEFAULT_IDLE_TRIGGER_FILENAME),
+          "# Idle Tasks\n- Save memories",
+        );
+
+        const cfg: OpenClawConfig = {
+          agents: {
+            defaults: {
+              workspace: tmpDir,
+            },
+          },
+          session: {
+            store: storePath,
+            onIdle: [{ name: "test-trigger", after: "1m" }],
+          },
+        };
+
+        const now = Date.now();
+        const lastActivity = now - 5 * 60 * 1000;
+
+        // Legacy entry without lastUserMessageAt
+        await fs.writeFile(
+          storePath,
+          JSON.stringify(
+            {
+              "main:main": {
+                sessionId: "sid",
+                updatedAt: lastActivity,
+                origin: {
+                  provider: "whatsapp",
+                  from: "+15551234567",
+                },
+              },
+            },
+            null,
+            2,
+          ),
+        );
+
+        replySpy.mockResolvedValue({ text: "IDLE_OK" });
+
+        const result = await runIdleTriggerOnce({
+          cfg,
+          deps: {
+            getQueueSize: () => 0,
+            nowMs: () => now,
+          },
+        });
+
+        expect(result.status).toBe("ran");
+        expect(replySpy).toHaveBeenCalledTimes(1);
+      } finally {
+        replySpy.mockRestore();
+        await fs.rm(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it("does not re-trigger when lastUserMessageAt has not changed since last trigger", async () => {
+      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-idle-"));
+      const storePath = path.join(tmpDir, "sessions.json");
+      const replySpy = vi.spyOn(replyModule, "getReplyFromConfig");
+
+      try {
+        await fs.writeFile(
+          path.join(tmpDir, DEFAULT_IDLE_TRIGGER_FILENAME),
+          "# Idle Tasks\n- Save memories",
+        );
+
+        const cfg: OpenClawConfig = {
+          agents: {
+            defaults: {
+              workspace: tmpDir,
+            },
+          },
+          session: {
+            store: storePath,
+            onIdle: [{ name: "test-trigger", after: "1m" }],
+          },
+        };
+
+        const now = Date.now();
+        const lastUserMessage = now - 5 * 60 * 1000;
+        // Trigger already fired after the last user message
+        const lastTriggered = lastUserMessage + 1000;
+
+        await fs.writeFile(
+          storePath,
+          JSON.stringify(
+            {
+              "main:main": {
+                sessionId: "sid",
+                updatedAt: now - 1000, // recently updated by agent
+                lastUserMessageAt: lastUserMessage,
+                lastIdleTriggeredAt: {
+                  "test-trigger": lastTriggered,
+                },
+                origin: {
+                  provider: "whatsapp",
+                  from: "+15551234567",
+                },
+              },
+            },
+            null,
+            2,
+          ),
+        );
+
+        replySpy.mockResolvedValue({ text: "IDLE_OK" });
+
+        const result = await runIdleTriggerOnce({
+          cfg,
+          deps: {
+            getQueueSize: () => 0,
+            nowMs: () => now,
+          },
+        });
+
+        // Should not trigger because lastUserMessageAt <= lastTriggeredAt
+        expect(result.status).toBe("ran");
+        if (result.status === "ran") {
+          expect(result.triggersProcessed).toBe(0);
+        }
+      } finally {
+        replySpy.mockRestore();
+        await fs.rm(tmpDir, { recursive: true, force: true });
+      }
+    });
+
     it("tracks per-trigger timestamps to prevent re-triggering", async () => {
       const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-idle-"));
       const storePath = path.join(tmpDir, "sessions.json");

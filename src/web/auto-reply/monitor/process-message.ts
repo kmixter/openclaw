@@ -152,6 +152,12 @@ export async function processMessage(params: {
   groupHistory?: GroupHistoryEntry[];
   suppressGroupHistoryClear?: boolean;
 }) {
+  const _perfStart = Date.now();
+  const _perf = (label: string) => {
+    const elapsed = Date.now() - _perfStart;
+    console.warn(`[perf] ${label}: +${elapsed}ms`);
+  };
+  _perf("processMessage:start");
   const conversationId = params.msg.conversationId ?? params.msg.from;
   const { storePath, envelopeOptions, previousTimestamp } = resolveInboundSessionEnvelopeContext({
     cfg: params.cfg,
@@ -389,6 +395,7 @@ export async function processMessage(params: {
   });
   trackBackgroundTask(params.backgroundTasks, metaTask);
 
+  _perf("pre-dispatch");
   const { queuedFinal } = await dispatchReplyWithBufferedBlockDispatcher({
     ctx: ctxPayload,
     cfg: params.cfg,
@@ -403,12 +410,14 @@ export async function processMessage(params: {
         }
       },
       deliver: async (payload: ReplyPayload, info) => {
+        _perf(`deliver:${info.kind}`);
         if (info.kind !== "final") {
           // Only deliver final replies to external messaging channels (WhatsApp).
           // Block (reasoning/thinking) and tool updates are meant for the internal
           // web UI only; sending them here leaks chain-of-thought to end users.
           return;
         }
+        _perf("deliver:final:start-send");
         await deliverWebReply({
           replyResult: payload,
           msg: params.msg,
@@ -456,6 +465,7 @@ export async function processMessage(params: {
       disableBlockStreaming: true,
       onModelSelected,
       onToolStart: async (payload) => {
+        _perf(`toolStart:${payload.name}`);
         if (params.msg.chatType === "group") {
           return;
         }
@@ -484,6 +494,7 @@ export async function processMessage(params: {
     },
   });
 
+  _perf("dispatch:done");
   if (!queuedFinal) {
     if (shouldClearGroupHistory) {
       params.groupHistories.set(params.groupHistoryKey, []);

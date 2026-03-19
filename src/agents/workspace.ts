@@ -168,11 +168,6 @@ type WorkspaceOnboardingState = {
 /** Set of recognized bootstrap filenames for runtime validation */
 const VALID_BOOTSTRAP_NAMES: ReadonlySet<string> = new Set([
   DEFAULT_AGENTS_FILENAME,
-  DEFAULT_SOUL_FILENAME,
-  DEFAULT_TOOLS_FILENAME,
-  DEFAULT_IDENTITY_FILENAME,
-  DEFAULT_USER_FILENAME,
-  DEFAULT_HEARTBEAT_FILENAME,
   DEFAULT_BOOTSTRAP_FILENAME,
   DEFAULT_MEMORY_FILENAME,
   DEFAULT_MEMORY_ALT_FILENAME,
@@ -324,11 +319,6 @@ export async function ensureAgentWorkspace(params?: {
 }): Promise<{
   dir: string;
   agentsPath?: string;
-  soulPath?: string;
-  toolsPath?: string;
-  identityPath?: string;
-  userPath?: string;
-  heartbeatPath?: string;
   bootstrapPath?: string;
 }> {
   const rawDir = params?.dir?.trim() ? params.dir.trim() : DEFAULT_AGENT_WORKSPACE_DIR;
@@ -340,22 +330,16 @@ export async function ensureAgentWorkspace(params?: {
   }
 
   const agentsPath = path.join(dir, DEFAULT_AGENTS_FILENAME);
-  const soulPath = path.join(dir, DEFAULT_SOUL_FILENAME);
-  const toolsPath = path.join(dir, DEFAULT_TOOLS_FILENAME);
-  const identityPath = path.join(dir, DEFAULT_IDENTITY_FILENAME);
-  const userPath = path.join(dir, DEFAULT_USER_FILENAME);
-  const heartbeatPath = path.join(dir, DEFAULT_HEARTBEAT_FILENAME);
   const bootstrapPath = path.join(dir, DEFAULT_BOOTSTRAP_FILENAME);
   const statePath = resolveWorkspaceStatePath(dir);
 
   const isBrandNewWorkspace = await (async () => {
-    const templatePaths = [agentsPath, soulPath, toolsPath, identityPath, userPath, heartbeatPath];
-    const userContentPaths = [
+    const paths = [
+      agentsPath,
       path.join(dir, "memory"),
       path.join(dir, DEFAULT_MEMORY_FILENAME),
       path.join(dir, ".git"),
     ];
-    const paths = [...templatePaths, ...userContentPaths];
     const existing = await Promise.all(
       paths.map(async (p) => {
         try {
@@ -370,17 +354,7 @@ export async function ensureAgentWorkspace(params?: {
   })();
 
   const agentsTemplate = await loadTemplate(DEFAULT_AGENTS_FILENAME);
-  const soulTemplate = await loadTemplate(DEFAULT_SOUL_FILENAME);
-  const toolsTemplate = await loadTemplate(DEFAULT_TOOLS_FILENAME);
-  const identityTemplate = await loadTemplate(DEFAULT_IDENTITY_FILENAME);
-  const userTemplate = await loadTemplate(DEFAULT_USER_FILENAME);
-  const heartbeatTemplate = await loadTemplate(DEFAULT_HEARTBEAT_FILENAME);
   await writeFileIfMissing(agentsPath, agentsTemplate);
-  await writeFileIfMissing(soulPath, soulTemplate);
-  await writeFileIfMissing(toolsPath, toolsTemplate);
-  await writeFileIfMissing(identityPath, identityTemplate);
-  await writeFileIfMissing(userPath, userTemplate);
-  await writeFileIfMissing(heartbeatPath, heartbeatTemplate);
 
   let state = await readWorkspaceOnboardingState(statePath);
   let stateDirty = false;
@@ -400,13 +374,8 @@ export async function ensureAgentWorkspace(params?: {
   }
 
   if (!state.bootstrapSeededAt && !state.onboardingCompletedAt && !bootstrapExists) {
-    // Legacy migration path: if USER/IDENTITY diverged from templates, or if user-content
-    // indicators exist, treat onboarding as complete and avoid recreating BOOTSTRAP for
-    // already-onboarded workspaces.
-    const [identityContent, userContent] = await Promise.all([
-      fs.readFile(identityPath, "utf-8"),
-      fs.readFile(userPath, "utf-8"),
-    ]);
+    // If user-content indicators exist, treat onboarding as complete and avoid
+    // recreating BOOTSTRAP for already-onboarded workspaces.
     const hasUserContent = await (async () => {
       const indicators = [
         path.join(dir, "memory"),
@@ -423,9 +392,7 @@ export async function ensureAgentWorkspace(params?: {
       }
       return false;
     })();
-    const legacyOnboardingCompleted =
-      identityContent !== identityTemplate || userContent !== userTemplate || hasUserContent;
-    if (legacyOnboardingCompleted) {
+    if (hasUserContent) {
       markState({ onboardingCompletedAt: nowIso() });
     } else {
       const bootstrapTemplate = await loadTemplate(DEFAULT_BOOTSTRAP_FILENAME);
@@ -449,11 +416,6 @@ export async function ensureAgentWorkspace(params?: {
   return {
     dir,
     agentsPath,
-    soulPath,
-    toolsPath,
-    identityPath,
-    userPath,
-    heartbeatPath,
     bootstrapPath,
   };
 }
@@ -490,26 +452,6 @@ export async function loadWorkspaceBootstrapFiles(dir: string): Promise<Workspac
       filePath: path.join(resolvedDir, DEFAULT_AGENTS_FILENAME),
     },
     {
-      name: DEFAULT_SOUL_FILENAME,
-      filePath: path.join(resolvedDir, DEFAULT_SOUL_FILENAME),
-    },
-    {
-      name: DEFAULT_TOOLS_FILENAME,
-      filePath: path.join(resolvedDir, DEFAULT_TOOLS_FILENAME),
-    },
-    {
-      name: DEFAULT_IDENTITY_FILENAME,
-      filePath: path.join(resolvedDir, DEFAULT_IDENTITY_FILENAME),
-    },
-    {
-      name: DEFAULT_USER_FILENAME,
-      filePath: path.join(resolvedDir, DEFAULT_USER_FILENAME),
-    },
-    {
-      name: DEFAULT_HEARTBEAT_FILENAME,
-      filePath: path.join(resolvedDir, DEFAULT_HEARTBEAT_FILENAME),
-    },
-    {
       name: DEFAULT_BOOTSTRAP_FILENAME,
       filePath: path.join(resolvedDir, DEFAULT_BOOTSTRAP_FILENAME),
     },
@@ -540,13 +482,7 @@ export async function loadWorkspaceBootstrapFiles(dir: string): Promise<Workspac
   return result;
 }
 
-const MINIMAL_BOOTSTRAP_ALLOWLIST = new Set([
-  DEFAULT_AGENTS_FILENAME,
-  DEFAULT_TOOLS_FILENAME,
-  DEFAULT_SOUL_FILENAME,
-  DEFAULT_IDENTITY_FILENAME,
-  DEFAULT_USER_FILENAME,
-]);
+const MINIMAL_BOOTSTRAP_ALLOWLIST = new Set([DEFAULT_AGENTS_FILENAME]);
 
 export function filterBootstrapFilesForSession(
   files: WorkspaceBootstrapFile[],

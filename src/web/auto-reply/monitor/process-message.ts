@@ -411,11 +411,20 @@ export async function processMessage(params: {
       },
       deliver: async (payload: ReplyPayload, info) => {
         _perf(`deliver:${info.kind}`);
-        if (info.kind !== "final") {
-          // Only deliver final replies to external messaging channels (WhatsApp).
-          // Block (reasoning/thinking) and tool updates are meant for the internal
-          // web UI only; sending them here leaks chain-of-thought to end users.
+        if (info.kind === "block") {
+          // Block (reasoning/thinking) updates are for the internal web UI only.
+          // Reasoning suppression is also enforced inside deliverWebReply() via
+          // shouldSuppressReasoningReply (upstream 039713c3e7).
           return;
+        }
+        if (info.kind === "tool") {
+          // Only deliver tool results that carry media (e.g. TTS audio).
+          // Text-only tool summaries are suppressed to avoid leaking
+          // chain-of-thought to end users.
+          const hasMedia = Boolean(payload.mediaUrl || payload.mediaUrls?.length);
+          if (!hasMedia) {
+            return;
+          }
         }
         _perf("deliver:final:start-send");
         await deliverWebReply({

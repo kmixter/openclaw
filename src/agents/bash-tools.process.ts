@@ -71,19 +71,19 @@ const processSchema = Type.Object({
   ),
 });
 
-const MAX_POLL_WAIT_MS = 120_000;
+const DEFAULT_POLL_WAIT_MS = 120_000;
 
 function resolvePollWaitMs(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) {
-    return Math.max(0, Math.min(MAX_POLL_WAIT_MS, Math.floor(value)));
+    return Math.max(0, Math.floor(value));
   }
   if (typeof value === "string") {
     const parsed = Number.parseInt(value.trim(), 10);
     if (Number.isFinite(parsed)) {
-      return Math.max(0, Math.min(MAX_POLL_WAIT_MS, parsed));
+      return Math.max(0, parsed);
     }
   }
-  return 0;
+  return DEFAULT_POLL_WAIT_MS;
 }
 
 function failText(text: string): AgentToolResult<unknown> {

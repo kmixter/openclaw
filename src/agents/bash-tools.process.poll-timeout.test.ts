@@ -106,11 +106,11 @@ test("process poll exposes adaptive retryInMs for repeated no-output polls", asy
   const { processTool } = createProcessSessionHarness(sessionId);
 
   const polls = await Promise.all([
-    pollSession(processTool, "toolcall-1", sessionId),
-    pollSession(processTool, "toolcall-2", sessionId),
-    pollSession(processTool, "toolcall-3", sessionId),
-    pollSession(processTool, "toolcall-4", sessionId),
-    pollSession(processTool, "toolcall-5", sessionId),
+    pollSession(processTool, "toolcall-1", sessionId, 0),
+    pollSession(processTool, "toolcall-2", sessionId, 0),
+    pollSession(processTool, "toolcall-3", sessionId, 0),
+    pollSession(processTool, "toolcall-4", sessionId, 0),
+    pollSession(processTool, "toolcall-5", sessionId, 0),
   ]);
 
   expect(polls.map((poll) => retryMs(poll))).toEqual([5000, 10000, 30000, 60000, 60000]);
@@ -120,21 +120,21 @@ test("process poll resets retryInMs when output appears and clears on completion
   const sessionId = "sess-reset";
   const { processTool, session } = createProcessSessionHarness(sessionId);
 
-  const poll1 = await pollSession(processTool, "toolcall-1", sessionId);
-  const poll2 = await pollSession(processTool, "toolcall-2", sessionId);
+  const poll1 = await pollSession(processTool, "toolcall-1", sessionId, 0);
+  const poll2 = await pollSession(processTool, "toolcall-2", sessionId, 0);
   expect(retryMs(poll1)).toBe(5000);
   expect(retryMs(poll2)).toBe(10000);
 
   appendOutput(session, "stdout", "step complete\n");
-  const pollWithOutput = await pollSession(processTool, "toolcall-output", sessionId);
+  const pollWithOutput = await pollSession(processTool, "toolcall-output", sessionId, 0);
   expect(retryMs(pollWithOutput)).toBe(5000);
 
   markExited(session, 0, null, "completed");
-  const pollCompleted = await pollSession(processTool, "toolcall-completed", sessionId);
+  const pollCompleted = await pollSession(processTool, "toolcall-completed", sessionId, 0);
   expect(pollStatus(pollCompleted)).toBe("completed");
   expect(retryMs(pollCompleted)).toBeUndefined();
 
-  const pollFinished = await pollSession(processTool, "toolcall-finished", sessionId);
+  const pollFinished = await pollSession(processTool, "toolcall-finished", sessionId, 0);
   expect(pollStatus(pollFinished)).toBe("completed");
   expect(retryMs(pollFinished)).toBeUndefined();
 });

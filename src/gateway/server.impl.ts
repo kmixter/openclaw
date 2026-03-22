@@ -272,6 +272,14 @@ export async function startGatewayServer(
   const minimalTestGateway =
     process.env.VITEST === "1" && process.env.OPENCLAW_TEST_MINIMAL_GATEWAY === "1";
 
+  // Rotate gateway stdout/stderr logs if they've grown too large.
+  try {
+    const { rotateGatewayLogs } = await import("../daemon/launchd.js");
+    rotateGatewayLogs(process.env as Record<string, string | undefined>);
+  } catch {
+    // Non-fatal — rotation is best-effort.
+  }
+
   // Ensure all default port derivations (browser/canvas) see the actual runtime port.
   process.env.OPENCLAW_GATEWAY_PORT = String(port);
   logAcceptedEnvOption({

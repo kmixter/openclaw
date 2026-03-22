@@ -320,6 +320,22 @@ function isRollingPath(file: string): boolean {
   );
 }
 
+function parseRollingLogDate(name: string): Date | null {
+  // Extract YYYY-MM-DD from "openclaw-YYYY-MM-DD.log"
+  const prefix = `${LOG_PREFIX}-`;
+  const suffix = LOG_SUFFIX;
+  if (!name.startsWith(prefix) || !name.endsWith(suffix)) {
+    return null;
+  }
+  const dateStr = name.slice(prefix.length, -suffix.length);
+  const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return null;
+  }
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function pruneOldRollingLogs(dir: string): void {
   try {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -331,12 +347,15 @@ function pruneOldRollingLogs(dir: string): void {
       if (!entry.name.startsWith(`${LOG_PREFIX}-`) || !entry.name.endsWith(LOG_SUFFIX)) {
         continue;
       }
+      // Use the date embedded in the filename rather than mtime, because
+      // stale file descriptors can update mtime on old files and prevent cleanup.
+      const logDate = parseRollingLogDate(entry.name);
+      if (!logDate || logDate.getTime() >= cutoff) {
+        continue;
+      }
       const fullPath = path.join(dir, entry.name);
       try {
-        const stat = fs.statSync(fullPath);
-        if (stat.mtimeMs < cutoff) {
-          fs.rmSync(fullPath, { force: true });
-        }
+        fs.rmSync(fullPath, { force: true });
       } catch {
         // ignore errors during pruning
       }

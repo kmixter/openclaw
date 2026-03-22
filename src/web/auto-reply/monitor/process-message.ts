@@ -499,7 +499,9 @@ export async function processMessage(params: {
     if (shouldClearGroupHistory) {
       params.groupHistories.set(params.groupHistoryKey, []);
     }
-    logVerbose("Skipping auto-reply: silent token or no text/media returned from resolver");
+    whatsappOutboundLog.warn(
+      `No reply delivered to ${params.msg.from ?? "unknown"}: model returned no text/media`,
+    );
     return false;
   }
 

@@ -1,3 +1,4 @@
+import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { parseStrictInteger, parseStrictPositiveInteger } from "../infra/parse-finite-number.js";
@@ -67,6 +68,40 @@ export function resolveGatewayLogPaths(env: GatewayServiceEnv): {
     stdoutPath: path.join(logDir, `${prefix}.log`),
     stderrPath: path.join(logDir, `${prefix}.err.log`),
   };
+}
+
+const GATEWAY_LOG_KEEP_ROTATED = 3;
+
+/**
+ * Rotate gateway stdout/stderr logs on startup.
+ * Keeps up to GATEWAY_LOG_KEEP_ROTATED old copies (`.1`, `.2`, …).
+ * Always rotates non-empty files so each gateway run starts with a fresh log.
+ */
+export function rotateGatewayLogs(env: GatewayServiceEnv): void {
+  const { stdoutPath, stderrPath } = resolveGatewayLogPaths(env);
+  for (const logPath of [stdoutPath, stderrPath]) {
+    try {
+      const stat = fsSync.statSync(logPath);
+      if (stat.size === 0) {
+        continue;
+      }
+      // Shift existing rotated files: .3 → delete, .2 → .3, .1 → .2
+      for (let i = GATEWAY_LOG_KEEP_ROTATED; i >= 1; i--) {
+        const src = i === 1 ? logPath : `${logPath}.${i - 1}`;
+        const dst = `${logPath}.${i}`;
+        try {
+          if (i === GATEWAY_LOG_KEEP_ROTATED) {
+            fsSync.rmSync(dst, { force: true });
+          }
+          fsSync.renameSync(src, dst);
+        } catch {
+          // source may not exist
+        }
+      }
+    } catch {
+      // file doesn't exist yet — nothing to rotate
+    }
+  }
 }
 
 export async function readLaunchAgentProgramArguments(
